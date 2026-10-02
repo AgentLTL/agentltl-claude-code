@@ -122,7 +122,14 @@ def lint(ruleset: RuleSet, registry: Optional[SpecRegistry] = None) -> List[str]
                                    f"{sorted(schemas[tool])}")
                     continue
                 prefix = tool.split("_", 1)[0]
-                if "_" in tool and (registry.get(prefix) is not None or prefix in _RUNNERS):
+                if "_" in tool and registry.get(prefix) is not None:
+                    # a subcommand the spec does not declare (`git notes` -> git_notes) keeps
+                    # its words in `argv`
+                    unknown = sorted(keys - set(_ANY_TOOL_ARGS) - {"argv"})
+                    if unknown:
+                        out.append(f"{rule.id}: {tool} is not a declared subcommand, so its "
+                                   f"only argument is 'argv'; {unknown} never match.")
+                elif "_" in tool and prefix in _RUNNERS:
                     out.append(f"{rule.id}: no command translates to '{tool}'. Check with "
                                f"`agentltl translate \"{tool.replace('_', ' ', 1)}\"`; "
                                f"a command without a spec is '{prefix}' with an 'argv' list, "

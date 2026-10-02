@@ -93,9 +93,11 @@ rules:
   - {id: c, never: frobnicate, with: {level: 3}}
   - {id: d, never: [Edit, git_push], with: {force: true}}
   - {id: e, never: {tool: npm, with: {argv: install}}}
+  - {id: f, never: {tool: git_notes, where: {"*": "*x*"}}}
+  - {id: g, never: {tool: git_notes, with: {message: x}}}
 """)
         warnings = lint(rs)
-        assert [w.split(":")[0] for w in warnings] == ["a", "b", "c"]
+        assert [w.split(":")[0] for w in warnings] == ["a", "b", "c", "g"]
         assert "'remote'" in warnings[0] and "make_test" in warnings[1]
 
 
