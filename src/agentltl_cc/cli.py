@@ -1,5 +1,5 @@
 """
-agentltl_guard/cli.py – the ``agentltl`` command.
+agentltl_cc/cli.py – the ``agentltl`` command.
 
     agentltl validate [FILE]             compile the rules; list them or the problems
     agentltl check STEP...               replay steps through the rules in a fresh session

@@ -1,13 +1,13 @@
 """
-agentltl_guard/store.py – per-session state on disk.
+agentltl_cc/store.py – per-session state on disk.
 
 Each hook call is a fresh process, so the session's trace and enforcer counters live in
 ``<state dir>/<session id>.json``. Claude Code may run tool calls in parallel, so every
 read-modify-write holds an exclusive lock on ``<file>.lock``.
 
-State dir: ``$AGENTLTL_GUARD_STATE``, else ``sessions/`` next to the plugin's virtualenv
+State dir: ``$AGENTLTL_CC_STATE``, else ``sessions/`` next to the plugin's virtualenv
 (``$CLAUDE_PLUGIN_DATA/venv`` → ``$CLAUDE_PLUGIN_DATA/sessions``, so the hook and the
-``agentltl`` CLI agree without sharing an environment), else ``~/.cache/agentltl-guard/sessions``.
+``agentltl`` CLI agree without sharing an environment), else ``~/.cache/agentltl-claude-code/sessions``.
 """
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ from typing import Any, Dict, Iterator, List, Optional
 
 
 def state_dir() -> str:
-    if os.environ.get("AGENTLTL_GUARD_STATE"):
-        return os.environ["AGENTLTL_GUARD_STATE"]
+    if os.environ.get("AGENTLTL_CC_STATE"):
+        return os.environ["AGENTLTL_CC_STATE"]
     if os.path.basename(sys.prefix) == "venv":
         return os.path.join(os.path.dirname(sys.prefix), "sessions")
-    return os.path.join(os.path.expanduser("~"), ".cache", "agentltl-guard", "sessions")
+    return os.path.join(os.path.expanduser("~"), ".cache", "agentltl-claude-code", "sessions")
 
 
 def session_path(session_id: str) -> str:

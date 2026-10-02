@@ -1,5 +1,5 @@
 """
-agentltl_guard/hook.py – the Claude Code hook: ``python -m agentltl_guard.hook`` reads the
+agentltl_cc/hook.py – the Claude Code hook: ``python -m agentltl_cc.hook`` reads the
 event JSON on stdin and prints the hook's JSON answer.
 
     SessionStart   remind Claude of the rules (also after a compaction); report file errors
@@ -103,7 +103,7 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
     n = len(ruleset.rules)
     where = ", ".join(ruleset.files)
     if not ruleset.settings.announce:
-        return {"systemMessage": f"AGENTLTL guard: {n} rule(s) from {where} (not announced)"}
+        return {"systemMessage": f"AgentLTL: {n} rule(s) from {where} (not announced)"}
     lines = [
         f"This project enforces {n} AGENTLTL rule(s) on every tool call, shell commands "
         "included (each command line is checked as the sequence of commands it runs). "
@@ -114,7 +114,7 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
         why = f" — {r.why}" if r.why else ""
         lines.append(f"- {r.id} [{r.mode}]: {r.summary}{why}")
     return {
-        "systemMessage": f"AGENTLTL guard: {n} rule(s) from {where}",
+        "systemMessage": f"AgentLTL: {n} rule(s) from {where}",
         "hookSpecificOutput": {"hookEventName": "SessionStart",
                                "additionalContext": "\n".join(lines)},
     }
@@ -134,7 +134,7 @@ def _broken_file(event: str, problems: List[str]) -> Optional[Dict[str, Any]]:
 
 
 def _failure(event: str, exc: Exception) -> Optional[Dict[str, Any]]:
-    text = f"AGENTLTL guard error ({type(exc).__name__}: {exc})"
+    text = f"AgentLTL guard error ({type(exc).__name__}: {exc})"
     if event == "PreToolUse":
         return {"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "ask",

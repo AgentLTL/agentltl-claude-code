@@ -1,5 +1,5 @@
 """
-agentltl_guard/guard.py – decide one Claude Code tool call against the rules.
+agentltl_cc/guard.py – decide one Claude Code tool call against the rules.
 
     guard = Guard(ruleset, Paths(cwd, root))
     guard.restore(state)                 # trace + enforcer counters of this session

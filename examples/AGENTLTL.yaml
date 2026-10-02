@@ -1,4 +1,4 @@
-# AGENTLTL.yaml – rules the agentltl-guard plugin enforces on every Claude Code tool call.
+# AGENTLTL.yaml – rules the agentltl-claude-code plugin enforces on every Claude Code tool call.
 # Shell commands are parsed into structured calls first; list the names with `agentltl tools`.
 
 settings:

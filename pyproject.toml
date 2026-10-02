@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentltl-guard"
+name = "agentltl-claude-code"
 version = "0.1.0"
 description = "AgentLTL rules in front of Claude Code's tool calls, shell commands included."
 readme = "README.md"
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [project.scripts]
-agentltl = "agentltl_guard.cli:main"
+agentltl = "agentltl_cc.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -5,7 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 find_python() {
     local c
-    for c in "${AGENTLTL_GUARD_PYTHON:-}" \
+    for c in "${AGENTLTL_CC_PYTHON:-}" \
              "${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/venv/bin/python}" \
              "$root/.venv/bin/python"; do
         if [[ -n "$c" && -x "$c" ]]; then echo "$c"; return 0; fi
@@ -20,7 +20,7 @@ fi
 if [[ -z "$py" ]]; then
     # Not installed. Stay out of the way unless rules exist, in which case say so loudly.
     if [[ -f "${CLAUDE_PROJECT_DIR:-.}/AGENTLTL.yaml" || -f "$HOME/.claude/AGENTLTL.yaml" ]]; then
-        msg="AGENTLTL guard is not installed (run $root/scripts/setup.sh); rules are not enforced."
+        msg="AgentLTL for Claude Code is not installed (run $root/scripts/setup.sh); rules are not enforced."
         if [[ "$1" == "PreToolUse" ]]; then
             printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}' "$msg"
         else
@@ -29,4 +29,4 @@ if [[ -z "$py" ]]; then
     fi
     exit 0
 fi
-exec "$py" -m agentltl_guard.hook
+exec "$py" -m agentltl_cc.hook

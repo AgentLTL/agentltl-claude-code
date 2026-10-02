@@ -1,4 +1,4 @@
-# agentltl-guard
+# agentltl-claude-code (AgentLTL for Claude Code)
 
 A Claude Code plugin that enforces project rules on every tool call with
 [AgentLTL](https://github.com/lailanelkoussy/AgentLTL), shell commands included. Rules live in
@@ -99,7 +99,7 @@ every project; a project rule with the same id replaces it.
 
 ### Writing rules in plain words
 
-Ask Claude, or run `/agentltl-guard:agentltl-rules <your rule in words>`. The skill:
+Ask Claude, or run `/agentltl-claude-code:agentltl-rules <your rule in words>`. The skill:
 
 1. looks up the real tool names (`agentltl translate`, `agentltl tools`);
 2. drafts the rule;
@@ -119,14 +119,14 @@ agentltl tools 'git_*'
 agentltl trace | reset              this session's trace and interventions
 ```
 
-`/agentltl-guard:agentltl` shows the guard's status.
+`/agentltl-claude-code:agentltl` shows the guard's status.
 
 ## Install
 
 ```bash
-git clone --recurse-submodules https://github.com/lailanelkoussy/agentltl-guard
-agentltl-guard/scripts/setup.sh          # venv with vendor/AgentLTL and vendor/cli-to-tools
-claude --plugin-dir ./agentltl-guard     # or add it through a marketplace
+git clone --recurse-submodules https://github.com/lailanelkoussy/agentltl-claude-code
+agentltl-claude-code/scripts/setup.sh          # venv with vendor/AgentLTL and vendor/cli-to-tools
+claude --plugin-dir ./agentltl-claude-code     # or add it through a marketplace
 ```
 
 `vendor/` pins AgentLTL and cli-to-tools as git submodules. Without them, `setup.sh` installs

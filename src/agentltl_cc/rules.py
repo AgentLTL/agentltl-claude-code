@@ -1,5 +1,5 @@
 """
-agentltl_guard/rules.py – AGENTLTL.yaml → AgentLTL constraints.
+agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
 
     settings:
       mode: block               # default escalation for every rule
@@ -15,7 +15,7 @@ agentltl_guard/rules.py – AGENTLTL.yaml → AgentLTL constraints.
     tools:                      # cli-to-tools specs for your own commands
       deploy: {options: [{flags: [--prod], type: bool}]}
 
-Rule kinds (exactly one per rule; targets are described in :mod:`agentltl_guard.match`):
+Rule kinds (exactly one per rule; targets are described in :mod:`agentltl_cc.match`):
 
     never: T                  T is never called
     before: [A, B]            B only once A has been called; dict form adds ``since: S``

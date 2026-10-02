@@ -1,5 +1,5 @@
 """
-agentltl_guard/match.py – which calls a rule is talking about.
+agentltl_cc/match.py – which calls a rule is talking about.
 
 A target names one or more tools and optionally narrows them by argument:
 

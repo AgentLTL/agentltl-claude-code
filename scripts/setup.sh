@@ -8,7 +8,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-venv="${AGENTLTL_GUARD_VENV:-${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/venv}}"
+venv="${AGENTLTL_CC_VENV:-${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/venv}}"
 venv="${venv:-$root/.venv}"
 extra=""
 [[ "${1:-}" == "--dev" ]] && extra="[dev]"
@@ -29,4 +29,4 @@ else
     "$pip" install -q "cli-to-tools @ git+https://github.com/lailanelkoussy/cli-to-tools.git"
 fi
 "$pip" install -q -e "$root$extra"
-echo "agentltl-guard installed in $venv"
+echo "agentltl-claude-code installed in $venv"

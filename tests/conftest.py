@@ -1,15 +1,15 @@
 import pytest
 
-from agentltl_guard.guard import Guard
-from agentltl_guard.match import Paths
-from agentltl_guard.rules import loads
+from agentltl_cc.guard import Guard
+from agentltl_cc.match import Paths
+from agentltl_cc.rules import loads
 
 
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     """No user-level rule file, and session state under tmp."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("AGENTLTL_GUARD_STATE", str(tmp_path / "state"))
+    monkeypatch.setenv("AGENTLTL_CC_STATE", str(tmp_path / "state"))
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
 
 

@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from agentltl_guard import hook, store
+from agentltl_cc import hook, store
 
 RULES = """
 rules:
@@ -96,7 +96,7 @@ def test_no_rule_file_is_silent(tmp_path):
 
 
 def test_internal_error_asks_instead_of_failing_open(project, monkeypatch):
-    from agentltl_guard import guard
+    from agentltl_cc import guard
 
     def boom(*a, **k):
         raise RuntimeError("kaput")
@@ -110,7 +110,7 @@ def test_launcher(project, tmp_path):
                "hook_event_name": "PreToolUse", "tool_name": "Bash",
                "tool_input": {"command": "git push"}, "tool_use_id": "t"}
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    env = {**os.environ, "AGENTLTL_GUARD_PYTHON": sys.executable,
+    env = {**os.environ, "AGENTLTL_CC_PYTHON": sys.executable,
            "CLAUDE_PROJECT_DIR": str(project)}
     done = subprocess.run([os.path.join(root, "hooks", "run"), "PreToolUse"],
                           input=json.dumps(payload), capture_output=True, text=True, env=env)

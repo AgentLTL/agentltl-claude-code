@@ -1,5 +1,5 @@
 {
-  "description": "AgentLTL guard: checks every tool call, shell commands included, against AGENTLTL.yaml",
+  "description": "AgentLTL for Claude Code: checks every tool call, shell commands included, against AGENTLTL.yaml",
   "hooks": {
     "SessionStart": [
       {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run SessionStart", "timeout": 600}]}

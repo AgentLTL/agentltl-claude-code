@@ -1,8 +1,8 @@
 import pytest
 
-from agentltl_guard.guard import lint
-from agentltl_guard.match import Paths, parse_target
-from agentltl_guard.rules import RuleFileError, find_rule_file, load, loads
+from agentltl_cc.guard import lint
+from agentltl_cc.match import Paths, parse_target
+from agentltl_cc.rules import RuleFileError, find_rule_file, load, loads
 
 from .conftest import guard_for, run
 

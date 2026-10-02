@@ -1,11 +1,11 @@
 ---
 name: agentltl
-description: Show the AgentLTL guard's status for this project, including the rules in force, what it recorded this session, and what it blocked. It can also reset the session trace.
+description: Show the AgentLTL for Claude Code's status for this project, including the rules in force, what it recorded this session, and what it blocked. It can also reset the session trace.
 argument-hint: "[status | trace | reset | check <command>...]"
 disable-model-invocation: true
 ---
 
-Report on the AgentLTL guard. Requested: `$ARGUMENTS` (empty means `status`).
+Report on the AgentLTL for Claude Code. Requested: `$ARGUMENTS` (empty means `status`).
 
 - **status**:
   1. Run `agentltl validate`, then `agentltl trace`.

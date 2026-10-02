@@ -2,9 +2,9 @@
 
 import json
 
-from agentltl_guard.guard import Guard
-from agentltl_guard.match import Paths
-from agentltl_guard.rules import loads
+from agentltl_cc.guard import Guard
+from agentltl_cc.match import Paths
+from agentltl_cc.rules import loads
 
 from .conftest import guard_for, run
 
