@@ -130,6 +130,9 @@ Each rule has a `mode`; pick how strict it should be:
 
 - **It checks commands, not what programs do inside.** It sees `make test`, not the `pytest`
   that the Makefile runs. When a rule mentions a tool, mention its wrappers too.
+- **It can learn new commands.** It understands git, common shell tools, Python, Docker,
+  kubectl, terraform, gh and aws out of the box. For another command, such as `helm`, Claude
+  adds a short description of it to `AGENTLTL.yaml`, so rules can refer to its flags.
 - **Rules go here, not in Claude's memory.** When you ask Claude to "remember" something
   like "never push to main", it is nudged to make it a rule instead of a `CLAUDE.md` line it
   could forget. Facts and preferences still go to memory.

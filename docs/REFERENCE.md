@@ -226,7 +226,17 @@ Targets:
   `then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}`;
 - give a list of targets to match any of them.
 
-`tools:` takes cli-to-tools specs for project commands, so rules can name their arguments.
+`tools:` takes [cli-to-tools](https://github.com/lailanelkoussy/cli-to-tools) specs, so rules
+can name the arguments of commands the bundled packs don't cover.
+- **Where they apply:** the same specs are used on Claude's Bash calls and by `agentltl
+  translate`, `check` and `tools`.
+- **Bundled commands:** a spec for a command that is already bundled (`kubectl`) extends it.
+  Write `extend: false` to replace it completely.
+- **Flags after the subcommand:** mark them `global: true` when the real CLI accepts them
+  there.
+
+The details are in "When a command needs a spec" in
+[`skills/agentltl-rules/reference.md`](../skills/agentltl-rules/reference.md).
 
 ### The rule library
 
