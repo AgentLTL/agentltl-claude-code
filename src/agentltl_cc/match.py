@@ -47,7 +47,7 @@ class RuleError(ValueError):
 
 
 # Arguments holding file paths, in Claude Code tools and in the cli-to-tools packs.
-PATH_KEYS = ("file_path", "notebook_path", "path", "paths", "file", "files", "redirect_to",
+PATH_KEYS = ("file_path", "notebook_path", "path", "paths", "file", "files", "redirect_to", "overwrite_to",
              "redirect_from", "directory", "sources", "destination", "destination_dir", "of",
              "if", "archive", "input", "patchfile", "patches", "script_file", "program_file")
 

@@ -81,7 +81,8 @@ class GuardTranslator(Translator):
     """cli-to-tools translator with what file rules need on top:
 
     - ``redirect_to`` / ``redirect_from``: files a redirection writes (``> f``, ``>> f``,
-      ``2> f``, ``&> f``, ``cat <<EOF > f``) or reads (``< f``);
+      ``2> f``, ``&> f``, ``cat <<EOF > f``) or reads (``< f``); ``overwrite_to``: the
+      ones that truncate the file first (``>``, ``&>``, not ``>>``);
     - path arguments made absolute (see :func:`normalize_paths`);
     - ``unknown_paths``: the call's files are only known at run time (``xargs rm``,
       ``find -exec rm {}``, ``rm $UNSET``);
@@ -93,9 +94,11 @@ class GuardTranslator(Translator):
 
     def _call(self, node: Any, command: str, call_id: str, index: int) -> ToolCall:
         call = super()._call(node, command, call_id, index)
-        writes, reads = _redirect_files(node.redirects)
+        writes, reads, truncates = _redirect_files(node.redirects)
         if writes:
             call.args["redirect_to"] = writes
+        if truncates:
+            call.args["overwrite_to"] = truncates
         if reads:
             call.args["redirect_from"] = reads
         if self.paths is not None:
@@ -111,9 +114,10 @@ class GuardTranslator(Translator):
         return call
 
 
-def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[str]]":
+def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[str], List[str]]":
     writes: List[str] = []
     reads: List[str] = []
+    truncates: List[str] = []
     for r in redirects:
         op, target = r.get("op", ""), r.get("target", "")
         if not target:
@@ -122,9 +126,11 @@ def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[s
             continue                       # 2>&1: copies a descriptor, no file
         if op in (">", ">>", ">|", "&>", "&>>", ">&"):
             writes.append(target)
+            if op in (">", ">|", "&>", ">&"):
+                truncates.append(target)
         elif op == "<":
             reads.append(target)
-    return writes, reads
+    return writes, reads, truncates
 
 
 def _patch_targets(call: ToolCall, paths: Paths) -> None:
@@ -190,7 +196,7 @@ def translator_for(ruleset: RuleSet) -> GuardTranslator:
 
 # runners whose subcommands cli-to-tools does not split into tools (`make test` -> make, argv)
 _RUNNERS = ("make", "npm", "yarn", "pnpm", "npx", "cargo", "go", "uv", "poetry", "just", "bun")
-_ANY_TOOL_ARGS = ("*", "redirect_to", "extra_args")
+_ANY_TOOL_ARGS = ("*", "redirect_to", "overwrite_to", "redirect_from", "extra_args")
 
 
 def lint(ruleset: RuleSet, registry: Optional[SpecRegistry] = None) -> List[str]:

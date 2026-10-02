@@ -64,7 +64,7 @@ rules:
         - {tool: [Edit, Write], with: {file_path: $f}, exists: true}
         - {tool: [sed, perl, tee], with: {paths: $f}, exists: true}   # in-place edits, tee
         - {tool: sponge, with: {file: $f}, exists: true}
-        - {tool: "*", with: {redirect_to: $f}, exists: true}          # > file, >> file
+        - {tool: "*", with: {overwrite_to: $f}, exists: true}         # > file (>> only appends)
     why: Read a file before replacing it.
 
   # Decision log before anything destructive.
