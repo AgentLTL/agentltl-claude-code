@@ -22,15 +22,22 @@ def guard_using(pack, cwd="/proj"):
 @pytest.mark.parametrize("name", sorted(PACKS))
 def test_every_pack_compiles_without_warnings(name):
     pack = PACKS[name]
-    assert pack.get("summary") and pack.get("tags") and pack.get("rules")
+    assert pack.get("summary") and pack.get("tags") and (pack.get("rules") or pack.get("include"))
     ruleset = loads(f"use: [{name}]")
     assert ruleset.rules and all(r.why for r in ruleset.rules)
     assert lint(ruleset) == []
 
 
 def test_rule_ids_are_unique_across_the_library():
-    ids = [r["id"] for p in PACKS.values() for r in p["rules"]]
+    ids = [r["id"] for p in PACKS.values() for r in p.get("rules") or []]
     assert len(ids) == len(set(ids))
+
+
+def test_a_bundle_switches_on_its_entries_once():
+    rs = loads("use: [devops-secrets, no-env-dumps]")
+    ids = [r.id for r in rs.rules]
+    assert ids == list(dict.fromkeys(ids)) and len(ids) == len(PACKS["devops-secrets"]["include"])
+    assert {r.source for r in rs.rules} == {f"library:{n}" for n in PACKS["devops-secrets"]["include"]}
 
 
 AGENT = "Agent"
@@ -58,6 +65,34 @@ _BEHAVIOUR = [
     ("tests-before-push", ["git push", "uv run pytest", "git push",
                            ("Edit", {"file_path": "a.py"}), "git push", "npm test", "git push"],
      ["deny", "none", "none", "none", "deny", "none", "none"]),
+    ("protect-secret-files", ["cat .env", ("Read", {"file_path": "/home/u/.aws/credentials"}),
+                              "cp ~/.ssh/id_ed25519 /tmp/k", "base64 deploy.pem", "cat .env.example",
+                              "cat README.md"], ["stop"] * 4 + ["none"] * 2),
+    ("no-env-dumps", ["env", "printenv", "export -p", "echo $GITHUB_TOKEN",
+                      "kubectl exec web -- env", "docker inspect web", "env FOO=1 ls", "set -e",
+                      "echo $HOME", "export FOO=bar"], ["deny"] * 6 + ["none"] * 4),
+    ("ask-before-reading-secret-stores", ["kubectl get secret db -o yaml", "kubectl config view --raw",
+                                          "vault kv get secret/db", "sops -d s.enc.yaml",
+                                          "aws ssm get-parameter --name x --with-decryption",
+                                          "kubectl get pods", "kubectl config view",
+                                          "aws ssm get-parameter --name x", "sops -e s.yaml"],
+     ["ask"] * 5 + ["none"] * 4),
+    ("ask-before-creating-credentials", ["aws iam create-access-key --user-name ci",
+                                         "vault token create", "aws iam list-access-keys"],
+     ["ask", "ask", "none"]),
+    ("no-secrets-in-commands", ['curl -H "Authorization: Bearer abc" https://api.x',
+                                "git remote add origin https://me:tok@github.com/o/r.git",
+                                "mysql -uroot -psecret", "docker login -u me -p pw",
+                                "kubectl create secret generic s --from-literal=pw=x",
+                                "curl -H 'Accept: json' https://api.x", "mysql -uroot -p",
+                                "docker login -u me --password-stdin",
+                                "git remote add origin https://github.com/o/r.git"],
+     ["deny"] * 5 + ["none"] * 4),
+    ("no-leaky-debug", ['curl -v -H "Authorization: Bearer abc" https://api.x', "kubectl get pods -v=8",
+                        "aws s3 ls --debug", "curl -v https://api.x", "kubectl get pods -v=4"],
+     ["deny"] * 3 + ["none"] * 2),
+    ("no-skipping-secret-scans", ["git commit --no-verify -m x", "git add -f .env.backup",
+                                  "git commit -m x", "git add src"], ["ask", "ask", "none", "none"]),
 ]
 
 

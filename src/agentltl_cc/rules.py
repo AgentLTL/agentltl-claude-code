@@ -323,7 +323,8 @@ LIBRARY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 
 
 def library() -> Dict[str, Dict[str, Any]]:
-    """The packaged rules, by name: each has ``summary``, ``tags``, ``rules``, ``tools``."""
+    """The packaged rules, by name: each has ``summary``, ``tags``, ``rules``, ``tools``, and
+    for a bundle, ``include`` (other entries it switches on)."""
     out: Dict[str, Dict[str, Any]] = {}
     if os.path.isdir(LIBRARY_DIR):
         for name in sorted(os.listdir(LIBRARY_DIR)):
@@ -354,13 +355,29 @@ def _use(raw: Any, settings: Settings, paths: Paths) -> Tuple[List[Rule], Dict[s
             close = difflib.get_close_matches(name, packs, n=1)
             hint = f" (did you mean '{close[0]}'?)" if close else ""
             raise RuleError(f"no library rule '{name}'{hint}; `agentltl library` lists them")
-        pack = packs[name]
-        for i, rule in enumerate(pack.get("rules") or []):
-            compiled = compile_rule({**rule, **extra}, settings, paths, f"library:{name}[{i}]")
-            compiled.source = f"library:{name}"
-            rules.append(compiled)
-        tools.update(pack.get("tools") or {})
+        for entry in _expand(name, packs):
+            pack = packs[entry]
+            for i, rule in enumerate(pack.get("rules") or []):
+                if any(r.id == rule.get("id") for r in rules):
+                    continue                  # already switched on by another entry or bundle
+                compiled = compile_rule({**rule, **extra}, settings, paths,
+                                        f"library:{entry}[{i}]")
+                compiled.source = f"library:{entry}"
+                rules.append(compiled)
+            tools.update(pack.get("tools") or {})
     return rules, tools
+
+
+def _expand(name: str, packs: Dict[str, Dict[str, Any]], seen: Tuple[str, ...] = ()) -> List[str]:
+    """*name* and, for a bundle, the entries its ``include:`` lists (recursively)."""
+    if name in seen:
+        raise RuleError(f"library entry '{name}' includes itself")
+    if name not in packs:
+        raise RuleError(f"library entry '{seen[-1]}' includes unknown '{name}'")
+    out = [name]
+    for sub in packs[name].get("include") or []:
+        out += [n for n in _expand(sub, packs, seen + (name,)) if n not in out]
+    return out
 
 
 def _rule_lines(text: str) -> List[int]:
