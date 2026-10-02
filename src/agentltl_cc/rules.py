@@ -420,8 +420,10 @@ def _before(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
 
 def _require(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
     target = parse_target(raw["require"], where, with_=raw.get("with"), where_=raw.get("where"))
-    if not target.with_ and not target.where:
-        raise RuleError(f"{where}: require needs 'with' or 'where' (what the arguments must be)")
+    for part in getattr(target, "targets", (target,)):
+        if not part.with_ and not part.where:
+            raise RuleError(f"{where}: require needs 'with' or 'where' on every target "
+                            f"(what the arguments of {part.describe()} must be)")
 
     def check(calls: List[Any]) -> Optional[str]:
         c = calls[-1]

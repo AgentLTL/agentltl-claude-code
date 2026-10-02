@@ -58,6 +58,8 @@ class TestValidation:
         ("rules: [{id: x, before: [a]}]", "expected [first, then]"),
         ("rules: [{id: x, before: [a, b], with: {f: 1}}]", "only apply to never"),
         ("rules: [{id: x, require: git_push}]", "require needs 'with' or 'where'"),
+        ("rules: [{id: x, require: [{tool: a, with: {b: 1}}, {tool: c}]}]",
+         "require needs 'with' or 'where' on every target"),
         ("rules: [{id: x, at_most: {call: a}}]", "expected {call: <target>, times: <n>}"),
         ("rules: [{id: x, ltl: 'F(called(\"a\"))'}]", "liveness property"),
         ("rules: [{id: x, ltl: 'before(\"a\", \"b\")'}]", "liveness property"),
@@ -147,6 +149,19 @@ class TestKinds:
         # the chain would make three, so none of it runs
         assert run(g, "git commit -m a", "git commit -m b && git commit -m c",
                    "git commit -m d", "git commit -m e") == ["none", "deny", "none", "deny"]
+
+    def test_require_with_several_targets(self):
+        g = guard_for("""
+rules:
+  - id: r
+    require:
+      - {tool: curl, where: {urls: "https://api.github.com/*"}}
+      - {tool: WebFetch, where: {url: "https://pypi.org/*"}}
+""")
+        fetch = ("WebFetch", {"url": "https://evil.example/x"})
+        assert run(g, "curl https://api.github.com/x", "curl https://evil.example/x", fetch,
+                   ("WebFetch", {"url": "https://pypi.org/p"}), "ls") == [
+            "none", "deny", "deny", "none", "none"]
 
     def test_ltl(self):
         g = guard_for("""rules: [{id: r, ltl: 'G(called("git_rebase") -> before("git_fetch", "git_rebase"))'}]""")
