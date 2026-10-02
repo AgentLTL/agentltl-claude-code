@@ -140,7 +140,8 @@ How calls are translated:
   [cli-to-tools](https://github.com/lailanelkoussy/cli-to-tools).
   - `git commit -am x && git push -f` is checked as `git_commit{message, all}` then
     `git_push{force: true}`, all or nothing.
-  - Output redirections appear as `redirect_to`.
+  - Output redirections appear as `redirect_to`, and those that truncate the file (`>`, not
+    `>>`) also as `overwrite_to`.
 - **Other tools:** they keep their Claude Code name and input (`Edit{file_path, ...}`).
 
 The guard never approves a call. An internal error becomes a permission prompt rather than a
@@ -191,6 +192,13 @@ rule can get forgotten. So the plugin adds one built-in rule, `memory-first` (mo
 `settings: {memory_first: false}` turns it off. A rule of your own with `id: memory-first`
 replaces it, for example with `mode: log` to remind Claude without refusing. Memory you add
 yourself (the `#` shortcut, editing the file) is never checked.
+
+### Secret leak alerts
+
+The `PostToolUse` hook scans each call's output for well-known credential formats (see
+`src/agentltl_cc/scan.py`). On a match, you get a notice naming the kind of credential, never
+its value, and Claude is told not to repeat or store it. `settings: {scan_output: false}`
+turns this off.
 
 ### Commands the guard cannot analyse
 
@@ -253,6 +261,8 @@ rules:
     before: {first: {tool: make, with: {argv: check}}, then: git_push, since: [Edit, Write]}
 ```
 
+- **Bundles:** an entry with `include: [names]` switches on other entries, for example
+  `devops-secrets`. A rule switched on twice counts once.
 - **`disable:`** also switches off rules from `~/.claude/AGENTLTL.yaml` (for this project only)
   and the built-in `memory-first`.
 - **`agentltl validate`** shows where each rule comes from: the project file, the user file,

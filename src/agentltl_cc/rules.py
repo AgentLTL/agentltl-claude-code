@@ -8,6 +8,7 @@ agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
       announce: true            # list the rules to Claude at session start and after compaction
       scope: session            # default memory for rules: session | project
       memory_first: true        # steer rules Claude wants to memorise into this file
+      scan_output: true         # warn when a call's output contains a credential
     rules:
       - id: tests-before-push
         before: {first: pytest, then: git_push, since: [Edit, Write]}
@@ -96,6 +97,7 @@ class Settings:
     announce: bool = True
     scope: str = "session"
     memory_first: bool = True
+    scan_output: bool = True
 
 
 @dataclass
@@ -395,7 +397,8 @@ def _settings(raw: Any) -> Settings:
         return Settings()
     if not isinstance(raw, dict):
         raise RuleError("expected a mapping")
-    unknown = set(raw) - {"mode", "retries", "unparseable", "announce", "scope", "memory_first"}
+    unknown = set(raw) - {"mode", "retries", "unparseable", "announce", "scope", "memory_first",
+                          "scan_output"}
     if unknown:
         raise RuleError(f"unknown key(s) {sorted(unknown)}")
     s = Settings()
@@ -415,6 +418,10 @@ def _settings(raw: Any) -> Settings:
         if not isinstance(raw["memory_first"], bool):
             raise RuleError("memory_first must be true or false")
         s.memory_first = raw["memory_first"]
+    if "scan_output" in raw:
+        if not isinstance(raw["scan_output"], bool):
+            raise RuleError("scan_output must be true or false")
+        s.scan_output = raw["scan_output"]
     unp = raw.get("unparseable")
     if isinstance(unp, str):
         unp = {"interactive": unp, "auto": unp}

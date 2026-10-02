@@ -4,7 +4,8 @@ event JSON on stdin and prints the hook's JSON answer.
 
     SessionStart   remind Claude of the rules (also after a compaction); report file errors
     PreToolUse     deny / ask / stop when a call breaks a rule, else stay silent
-    PostToolUse    add the call that ran to the session and project traces
+    PostToolUse    add the call that ran to the session and project traces; warn when its
+                   output contains a credential (settings.scan_output)
 
 Without an AGENTLTL.yaml (project or ``~/.claude``) it exits at once. It never approves a
 call: silence leaves the decision to Claude Code's permission flow. Any internal error
@@ -83,7 +84,17 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
             state.setdefault("decisions", []).append(
                 {"tool": tool, "input": tool_input, "action": verdict.action, "rule": verdict.rule})
             state["decisions"] = state["decisions"][-200:]
+    if event == "PostToolUse":
+        return _scan(ruleset, tool, payload.get("tool_response"))
     return None if verdict is None else _pre_tool_use(verdict)
+
+
+def _scan(ruleset: Any, tool: str, response: Any) -> Optional[Dict[str, Any]]:
+    if not ruleset.settings.scan_output or response is None:
+        return None
+    from .scan import credential_kinds, report
+    kinds = credential_kinds(response)
+    return report(tool, kinds) if kinds else None
 
 
 def _pre_tool_use(verdict: Any) -> Optional[Dict[str, Any]]:

@@ -30,8 +30,10 @@ the ones that break them.
   `git_push{force: true}`, all or nothing.
 - **Plain-language rules:** ask Claude to "add a rule: never push to main"; it writes the rule
   and tests it before saving.
-- **Opt-in rule library:** 11 tested best-practice rules for git, secrets, installs and
-  infrastructure. Activate the ones you want, skip the rest.
+- **Opt-in rule library:** 18 tested best-practice rules for git, secrets, installs and
+  infrastructure, plus a `devops-secrets` bundle. Activate the ones you want, skip the rest.
+- **Secret leak alerts:** when a command's output contains what looks like a credential, you
+  are told which kind, so you can rotate it, and Claude is told not to repeat it.
 - **Rules instead of memory:** when Claude would save a rule to `CLAUDE.md` or its memory,
   it writes an enforced rule in `AGENTLTL.yaml` instead.
 - **Fail-safe:** never approves a call; internal errors become a permission prompt.
@@ -75,9 +77,21 @@ ones to activate, per project or for all projects, and leave the rest off.
 | `ask-before-installing` | Ask before installing packages (pip, npm, uv, cargo, apt, brew, ...) |
 | `ask-before-infra-changes` | Ask before `terraform apply/destroy`, `kubectl apply/delete`, `aws s3 rm`, ... |
 | `protect-env-files` | Never read or touch `.env` (`.env.example` is fine) |
-| `read-before-overwrite` | Read a file before overwriting or editing it in place |
+| `read-before-overwrite` | Read a file before overwriting it (`Write`, `sed -i`, `>`; appending with `>>` is fine) |
 | `no-claude-coauthor` | Claude never signs commits, tags or notes |
 | `subagents-on-sonnet` | Subagents run on Sonnet or Haiku, not a bigger model |
+
+**Secrets and DevOps.** Switch them all on with the `devops-secrets` bundle, or pick:
+
+| Rule | Effect |
+|---|---|
+| `protect-secret-files` | Never read, copy, send or edit credential files: `.env`, keys and certificates, cloud and cluster credentials, tool tokens, shell history |
+| `no-env-dumps` | Never print the environment or a secret-looking variable (`env`, `printenv`, `export -p`, `echo $TOKEN`, `docker inspect`, ...) |
+| `ask-before-reading-secret-stores` | Ask before commands that print stored secrets: Kubernetes secrets, Vault, AWS/GCP/Azure secret managers, `terraform output`, password managers, `sops -d` |
+| `ask-before-creating-credentials` | Ask before minting access keys, service-account keys, tokens or service principals |
+| `no-secrets-in-commands` | Never put a secret on the command line: password flags, bearer headers, credentials in URLs |
+| `no-leaky-debug` | Warn before debug output that prints credentials (`curl -v` with auth headers, `kubectl -v=6+`, `--debug`) |
+| `no-skipping-secret-scans` | Ask before `--no-verify` (skips secret-scanning hooks) or `git add -f` |
 
 **Activate** them interactively with `/agentltl:setup`, or by name in `AGENTLTL.yaml`:
 
@@ -98,6 +112,26 @@ use:
 
 Library rules are referenced by name, not copied, so they improve with each plugin update.
 Every entry has a behaviour test in the repo.
+
+### Supported commands
+
+Rules refer to commands by the names they translate to, with their flags as named arguments.
+For example, `kubectl delete pod x -n prod` becomes `kubectl_delete{namespace: prod, ...}`.
+These commands are understood out of the box:
+
+| Area | Commands |
+|---|---|
+| Shell and files | coreutils and text tools (`ls`, `cat`, `cp`, `mv`, `rm`, `find`, `sed`, `awk`, `grep`, ...), `printenv`/`export`/`declare`, `base64`/`strings`/`xxd`, editors and writers (`vim`, `nano`, `perl`, `dd`, `install`, `tee`, `sponge`, `patch`), archives (`tar`, `zip`, `unzip`, `7z`) |
+| Git and GitHub | `git` (including `credential`), `gh` (including `pr`, `auth`, `secret`, `gist`) |
+| Containers and clusters | `docker`, `docker compose`, `kubectl`, `helm` |
+| Infrastructure and cloud | `terraform`, `aws` (`s3`, `secretsmanager`, `ssm`, `iam`, `sts`, `kms`, `ecr`, `configure`), `gcloud`, `az` |
+| Secrets | `vault`, `sops`, `ansible-vault`, `gpg`, `age`, `openssl`, `op`, `bw`, `pass`, `security`, `secret-tool`, `doppler`, `heroku`, `vercel` |
+| Languages and network | `python`, `pip`, `pytest`, `curl`, `wget`, `ssh`, `scp`, `rsync`, database clients (`mysql`, `psql`, `redis-cli`) |
+
+Wrappers are unwrapped (`sudo`, `env`, `xargs`, `bash -c`, `find -exec`). Any other command is
+still checked, under its own name with its words as `argv`. Claude can teach the plugin a new
+command by adding a short spec under `tools:` in `AGENTLTL.yaml` (see the
+[reference](docs/REFERENCE.md)).
 
 ### Write your own
 
@@ -133,6 +167,18 @@ It works by refusing each write to a memory file once, with a reminder. If the c
 be a rule, Claude repeats the call and it goes through. Memory you edit yourself is never
 checked. This rule is on by default; turn it off with `disable: [memory-first]`.
 
+### Secret leak alerts
+
+A rule can only stop a call before it runs. When a program prints a credential anyway (an app
+logging its config, a test dumping the environment), the value is already in the conversation.
+After every call, the plugin scans the output for well-known credential formats: cloud access
+key IDs, GitHub/GitLab/Slack/Stripe/npm tokens, Google, Anthropic and OpenAI API keys, private
+keys. If it finds one:
+- **you** see which kind of credential appeared, never the value, so you can rotate it;
+- **Claude** is told not to repeat, copy or write it anywhere.
+
+It is on by default; turn it off with `settings: {scan_output: false}`.
+
 ### Modes
 
 | `mode` | On violation |
@@ -163,6 +209,9 @@ rules are evaluated by [AgentLTL](https://github.com/lailanelkoussy/AgentLTL) (l
 
 The guard sees commands, not what programs do inside. It sees `make test`, not the `pytest` in
 your Makefile, so list wrappers in your rules. It's a rulebook for Claude, not a sandbox.
+
+Leak alerts recognise credential formats with a distinctive prefix. A plain password, or a
+token without a known prefix, is not recognised.
 
 Some shell commands can't be analysed: `eval`, a command named by a variable (`$CMD args`),
 and background jobs (`cmd &`). By default, you're asked about them in normal mode. In auto

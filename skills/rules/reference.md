@@ -10,6 +10,7 @@ settings:                 # all optional
   announce: true          # list the rules to Claude at session start and after compaction
   scope: session          # default memory for rules: session | project (see Memory)
   memory_first: true      # refuse memory writes once, steering rules into this file
+  scan_output: true       # after each call, warn when its output contains a credential
 
 use:                      # packaged rules from the plugin's library (`agentltl library`)
   - no-force-push
@@ -63,7 +64,8 @@ about a tool or argument name that nothing produces (such a rule never fires, or
 `require`, fires on every call). Commands with no spec become a
 tool named after the executable, with a single `argv` list (`where: {argv: "--prod"}`). Output
 redirections (`> file`, `>> file`, `2> file`, `&> file`, `cat <<EOF > file`) appear as
-`redirect_to`, input redirections (`< file`) as `redirect_from`. `patch` and `git apply` list
+`redirect_to`; the ones that truncate the file (all but `>>`) also as `overwrite_to`. Input
+redirections (`< file`) appear as `redirect_from`. `patch` and `git apply` list
 the files their diff modifies as `paths`, and `curl -O` its output file as `output`.
 
 Runners and package managers (`make`, `npm`, `yarn`, `cargo`, `go`, `uv`, `poetry`, `conda`,
