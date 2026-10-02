@@ -112,6 +112,13 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
         "working around it. Rules:",
     ]
     for r in ruleset.rules:
+        if r.id == "memory-first" and r.kind == "never":
+            lines.append(f"- memory-first [{r.mode}]: before you save anything to memory "
+                         "(CLAUDE.md, CLAUDE.local.md, .claude/rules/, auto memory), ask whether "
+                         "it is a rule about tool calls or commands. If it is, add it to "
+                         "AGENTLTL.yaml with the agentltl-rules skill instead: rules there are "
+                         "enforced, memory can be forgotten.")
+            continue
         why = f" — {r.why}" if r.why else ""
         memory = ", whole project" if r.scope == "project" else ""
         lines.append(f"- {r.id} [{r.mode}{memory}]: {r.summary}{why}")

@@ -9,6 +9,7 @@ settings:                 # all optional
     auto: note            # in auto / bypass mode: note = let through, tell Claude it was unchecked
   announce: true          # list the rules to Claude at session start and after compaction
   scope: session          # default memory for rules: session | project (see Memory)
+  memory_first: true      # refuse memory writes once, steering rules into this file
 
 rules:
   - id: short-kebab-id    # required, unique

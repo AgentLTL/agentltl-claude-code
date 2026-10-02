@@ -122,7 +122,7 @@ class TestFiles:
         user.write_text("settings: {mode: warn}\nrules: [{id: a, never: x}, {id: b, never: y}]")
         project.write_text("rules: [{id: b, never: z, mode: stop}]")
         rs = load([str(user), str(project)])
-        assert [(r.id, r.tools, r.mode) for r in rs.rules] == [
+        assert [(r.id, r.tools, r.mode) for r in rs.rules][:2] == [
             ("a", ("x",), "warn"), ("b", ("z",), "stop")]
         assert rs.settings.mode == "warn"
 

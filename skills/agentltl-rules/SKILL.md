@@ -1,6 +1,6 @@
 ---
 name: agentltl-rules
-description: Turn a natural-language rule ("never force-push", "run the tests before pushing", "don't touch .env") into AgentLTL rules in AGENTLTL.yaml, test them, and add them. Use when the user asks to add, change, explain or debug an AGENTLTL rule, or to translate a policy into AgentLTL / LTL constraints for this project.
+description: Turn a natural-language rule ("never force-push", "run the tests before pushing", "don't touch .env") into AgentLTL rules in AGENTLTL.yaml, test them, and add them. Use when the user asks to add, change, explain or debug an AGENTLTL rule, or to translate a policy into AgentLTL / LTL constraints for this project. Also use it instead of saving to memory (CLAUDE.md, auto memory) whenever what you would remember says which tool calls or commands to make, avoid, or make first ("remember to never…", "from now on always … before …").
 argument-hint: "<rule in plain words>"
 ---
 
@@ -74,6 +74,9 @@ write a rule.
 
    Then add the rule to `AGENTLTL.yaml`, keeping the rest of the file and its comments intact.
    Run `agentltl validate` again.
+
+If you came here instead of saving a memory, don't also save the rule to memory: the rule
+is listed to Claude at every session start. Save to memory only the parts no rule can check.
 
 Rules apply from the next tool call; no restart is needed. A broken file disables ALL rules,
 so always validate after editing.

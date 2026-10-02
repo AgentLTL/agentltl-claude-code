@@ -80,7 +80,8 @@ def test_session_start_reminds_claude_of_the_rules(project):
     out = event(project, "SessionStart", source="compact")
     context = out["hookSpecificOutput"]["additionalContext"]
     assert "tests-before-push [block]" in context and "CI is slow." in context
-    assert "2 rule(s)" in out["systemMessage"]
+    assert "memory-first [warn]: before you save anything to memory" in context
+    assert "3 rule(s)" in out["systemMessage"]
 
 
 def test_broken_file_is_loud(project):

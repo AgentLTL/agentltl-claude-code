@@ -7,6 +7,7 @@ agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
       unparseable: {interactive: ask, auto: note}
       announce: true            # list the rules to Claude at session start and after compaction
       scope: session            # default memory for rules: session | project
+      memory_first: true        # steer rules Claude wants to memorise into this file
     rules:
       - id: tests-before-push
         before: {first: pytest, then: git_push, since: [Edit, Write]}
@@ -34,6 +35,12 @@ session; starts empty with each new session, kept across compaction and resume) 
 
 Rules from ``~/.claude/AGENTLTL.yaml`` apply everywhere; the project file adds to them and
 replaces a user rule with the same id.
+
+With ``memory_first`` (the default), a built-in rule ``memory-first`` refuses, once, each write
+to Claude's memory (``CLAUDE.md``, ``CLAUDE.local.md``, ``.claude/rules/``, auto memory): a
+rule about tool calls belongs here, where it is enforced, not in memory, where it can be
+forgotten. Claude saves the memory anyway by repeating the call (``warn`` mode). A rule with
+the id ``memory-first`` replaces the built-in one.
 """
 
 from __future__ import annotations
@@ -86,6 +93,7 @@ class Settings:
     unparseable_auto: str = "note"
     announce: bool = True
     scope: str = "session"
+    memory_first: bool = True
 
 
 @dataclass
@@ -203,7 +211,29 @@ def load(files: List[str], paths: Optional[Paths] = None) -> RuleSet:
             merged.settings = part.settings
     if problems:
         raise RuleFileError(problems)
+    if merged.settings.memory_first and not merged.get(MEMORY_FIRST["id"]):
+        merged.rules.append(compile_rule(MEMORY_FIRST, merged.settings, paths or Paths(),
+                                         "built-in"))
     return merged
+
+
+# Files Claude Code loads as memory, and the ways a call writes them.
+MEMORY_FILES = ["CLAUDE.md", "CLAUDE.local.md", "*/.claude/rules/*",
+                "*/.claude/projects/*/memory/*"]
+MEMORY_FIRST: Dict[str, Any] = {
+    "id": "memory-first",
+    "never": [{"tool": ["Write", "Edit", "MultiEdit"], "where": {"file_path": MEMORY_FILES}},
+              {"tool": "*", "where": {"redirect_to": MEMORY_FILES}},
+              {"tool": ["tee", "sponge"], "where": {"*": MEMORY_FILES}}],
+    "mode": "warn",
+    "why": "AGENTLTL rules are enforced on every call; memory can be forgotten. If what you are "
+           "saving says which tool calls or commands to make, avoid, or make first (never X, "
+           "always Y before Z, at most N times, only with these arguments), add it to "
+           "AGENTLTL.yaml instead, using the agentltl-rules skill, and leave it out of memory.",
+    "fix": "Write the rule with the agentltl-rules skill. Keep in memory only what no rule can "
+           "check (facts, preferences, style). If nothing here can be a rule, repeat this exact "
+           "call to save it.",
+}
 
 
 def loads(text: str, paths: Optional[Paths] = None, source: str = "<rules>") -> RuleSet:
@@ -273,7 +303,7 @@ def _settings(raw: Any) -> Settings:
         return Settings()
     if not isinstance(raw, dict):
         raise RuleError("expected a mapping")
-    unknown = set(raw) - {"mode", "retries", "unparseable", "announce", "scope"}
+    unknown = set(raw) - {"mode", "retries", "unparseable", "announce", "scope", "memory_first"}
     if unknown:
         raise RuleError(f"unknown key(s) {sorted(unknown)}")
     s = Settings()
@@ -289,6 +319,10 @@ def _settings(raw: Any) -> Settings:
         if not isinstance(raw["announce"], bool):
             raise RuleError("announce must be true or false")
         s.announce = raw["announce"]
+    if "memory_first" in raw:
+        if not isinstance(raw["memory_first"], bool):
+            raise RuleError("memory_first must be true or false")
+        s.memory_first = raw["memory_first"]
     unp = raw.get("unparseable")
     if isinstance(unp, str):
         unp = {"interactive": unp, "auto": unp}

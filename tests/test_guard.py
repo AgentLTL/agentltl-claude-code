@@ -6,7 +6,7 @@ import pytest
 
 from agentltl_cc.guard import Guard
 from agentltl_cc.match import Paths
-from agentltl_cc.rules import RuleFileError, loads
+from agentltl_cc.rules import RuleFileError, load, loads
 
 from .conftest import guard_for, run
 
@@ -167,6 +167,11 @@ class TestWriteTargets:
         assert "only known at run time" in v.reason
         assert g.decide("Bash", {"command": "rm build/x"}).action == "none"
 
+    def test_an_unknown_value_only_makes_its_own_argument_uncertain(self):
+        g = guard_for("rules: [{id: r, never: {tool: '*', where: {redirect_to: '*.md'}}}]")
+        assert run(g, "cd $SOMEWHERE", "rm $F", "echo x > $F", "ls | xargs echo > a.txt"
+                   ) == ["none", "none", "deny", "deny"]
+
     def test_a_require_rule_cannot_be_satisfied_by_unknown_targets(self):
         g = guard_for("rules: [{id: r, require: {tool: rm, where: {paths: 'build/**'}}}]")
         assert run(g, "rm build/a", "ls | xargs rm", "F=build/b; rm $F") == ["none", "deny", "none"]
@@ -195,3 +200,36 @@ class TestWriteTargets:
         g = guard_for("rules: [{id: r, never: {tool: 'kubectl_*', with: {namespace: prod}}}]")
         assert run(g, "kubectl -n prod get pods", "kubectl -n dev delete pod x",
                    "kubectl -n prod delete pod x") == ["deny", "none", "deny"]
+
+
+class TestMemoryFirst:
+    """The built-in rule steers rules Claude would memorise into AGENTLTL.yaml."""
+
+    def guard(self, tmp_path, text="rules: []"):
+        (tmp_path / "AGENTLTL.yaml").write_text(text)
+        paths = Paths(str(tmp_path), str(tmp_path))
+        g = Guard(load([str(tmp_path / "AGENTLTL.yaml")], paths), paths)
+        g.restore({})
+        return g
+
+    def test_memory_writes_are_refused_once(self, tmp_path):
+        g = self.guard(tmp_path)
+        write = ("Write", {"file_path": "CLAUDE.md", "content": "never force-push"})
+        assert run(g, write, write) == ["deny", "none"]
+        assert run(g, "echo '- run tests first' >> CLAUDE.md", "echo x | tee .claude/rules/a.md",
+                   ("Edit", {"file_path": "/h/.claude/projects/p/memory/MEMORY.md"})
+                   ) == ["deny", "deny", "deny"]
+        assert "agentltl-rules skill" in g.decide(*write).reason
+
+    def test_reading_memory_and_other_files_is_fine(self, tmp_path):
+        g = self.guard(tmp_path)
+        assert run(g, "cat CLAUDE.md", ("Read", {"file_path": "CLAUDE.md"}),
+                   ("Write", {"file_path": "README.md"}), "echo x > notes.md", "cd $X"
+                   ) == ["none"] * 5
+
+    def test_can_be_turned_off_or_replaced(self, tmp_path):
+        write = ("Write", {"file_path": "CLAUDE.md"})
+        g = self.guard(tmp_path, "settings: {memory_first: false}\nrules: []")
+        assert run(g, write) == ["none"]
+        g = self.guard(tmp_path, "rules: [{id: memory-first, never: Write, mode: log}]")
+        assert g.decide(*write).action == "none"

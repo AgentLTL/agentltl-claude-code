@@ -175,6 +175,23 @@ other already has history.
 When one call breaks several rules, the strongest mode decides. This also stops a `warn`
 override from slipping past a `block` rule.
 
+### Rules before memory
+
+When Claude is told "remember: never push to main", it tends to save that to memory
+(`CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/`, or auto memory), which is exactly where a
+rule can get forgotten. So the plugin adds one built-in rule, `memory-first` (mode `warn`):
+
+- **At session start**, Claude is told to put rules about tool calls in `AGENTLTL.yaml`
+  (through the `agentltl-rules` skill), and keep memory for what no rule can check: facts,
+  preferences, style.
+- **Each write to a memory file is refused once**, with that reminder. That covers `Write`,
+  `Edit`, `echo … >> CLAUDE.md` and `tee`. If the content can't be a rule, Claude repeats the
+  exact call and it goes through.
+
+`settings: {memory_first: false}` turns it off. A rule of your own with `id: memory-first`
+replaces it, for example with `mode: log` to remind Claude without refusing. Memory you add
+yourself (the `#` shortcut, editing the file) is never checked.
+
 ### Commands the guard cannot analyse
 
 These are `eval`, `cmd &`, `$CMD args` and function definitions, which cli-to-tools rejects. What
@@ -262,7 +279,8 @@ This cuts both ways:
   and the files inside a `patch` or `git apply` diff.
 - **Unknown at check time:** when the files are only known at run time (`xargs`,
   `find -exec … {}`, an unset `$VARIABLE`), path rules treat the call as a possible match
-  instead of letting it through.
+  instead of letting it through. An unknown `$VARIABLE` only makes its own argument
+  uncertain: `cd $X` is not a possible write to `.env`, but `echo x > $F` is.
 
 ### To do
 

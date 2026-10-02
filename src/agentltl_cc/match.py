@@ -51,8 +51,9 @@ PATH_KEYS = ("file_path", "notebook_path", "path", "paths", "file", "files", "re
              "redirect_from", "directory", "sources", "destination", "destination_dir", "of",
              "if", "archive", "input", "patchfile", "patches", "script_file", "program_file")
 
-# Set on a call whose file arguments are only known at run time: `xargs rm`, `find -exec rm
-# {}`, `rm $UNSET`. A path condition on such a call is answered "maybe", never "no".
+# Set on a call whose file arguments are only known at run time: True when any path argument
+# may be (`xargs rm`, `find -exec rm {}`), else the list of arguments holding one (`rm $UNSET`
+# gives ["paths"]). A condition on such an argument is answered "maybe", never "no".
 UNKNOWN_PATHS = "unknown_paths"
 
 
@@ -81,14 +82,14 @@ class Target:
         if not tool_matches(name, self.tools):
             return False
         args = args or {}
-        unknown = bool(args.get(UNKNOWN_PATHS))
+        unknown = args.get(UNKNOWN_PATHS) or []
         maybe = False
         for key, expected in self.with_.items():
             actual = args.get(key)
             if not _equal(expected, actual) and not (
                     key in PATH_KEYS and isinstance(expected, str)
                     and _equal(_absolute(expected, paths), actual)):
-                if unknown and key in PATH_KEYS:
+                if _unknown(unknown, key):
                     maybe = True
                     continue
                 return False
@@ -97,7 +98,7 @@ class Target:
             values = _strings(list(args.values()) if key == "*" else args.get(key))
             found = [v for v in values if any(_glob(v, p, paths) for p in patterns)]
             if not found:
-                if unknown and (key == "*" or key in PATH_KEYS):
+                if _unknown(unknown, key):
                     maybe = True
                     continue
                 return False
@@ -203,13 +204,17 @@ def _canonical(value: str, paths: Paths) -> str:
     return _absolute(value, paths)
 
 
-def has_unknown_path(args: Dict[str, Any]) -> bool:
-    """Whether a path argument holds a value only known at run time."""
-    for key in PATH_KEYS:
-        for value in _strings(args.get(key)):
-            if "$" in value or "`" in value or "{}" in value or "<(" in value:
-                return True
-    return False
+def unknown_path_keys(args: Dict[str, Any]) -> List[str]:
+    """The path arguments holding a value only known at run time."""
+    return [key for key in PATH_KEYS if any(
+        "$" in v or "`" in v or "{}" in v or "<(" in v for v in _strings(args.get(key)))]
+
+
+def _unknown(unknown: Any, key: str) -> bool:
+    """Whether argument *key* may hold a path only known at run time (see UNKNOWN_PATHS)."""
+    if unknown is True:
+        return key == "*" or key in PATH_KEYS
+    return bool(unknown) and (key == "*" or key in unknown)
 
 
 def _names(spec: Any, where: str) -> Tuple[str, ...]:

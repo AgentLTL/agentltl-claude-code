@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
-from .match import UNKNOWN_PATHS, Paths, has_unknown_path, normalize_paths
+from .match import UNKNOWN_PATHS, Paths, normalize_paths, unknown_path_keys
 from .rules import MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
@@ -102,8 +102,10 @@ class GuardTranslator(Translator):
             if call.name == "curl" and call.args.get("remote_name") and not call.args.get("output"):
                 _curl_output(call)
             call.args = normalize_paths(call.args, self.paths)
-        if node.wrapper == "xargs" or has_unknown_path(call.args):
+        if node.wrapper == "xargs":
             call.args[UNKNOWN_PATHS] = True
+        elif not call.args.get(UNKNOWN_PATHS) and unknown_path_keys(call.args):
+            call.args[UNKNOWN_PATHS] = unknown_path_keys(call.args)
         return call
 
 
