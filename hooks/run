@@ -14,13 +14,28 @@ find_python() {
     return 1
 }
 
-py="$(find_python)"
-if [[ "$1" == "SessionStart" ]]; then
-    stale=1
-    [[ -n "$py" ]] && cmp -s "$root/vendor.lock" "$(dirname "$(dirname "$py")")/vendor.lock" && stale=0
-    if [[ -z "$py" || ( $stale == 1 && -z "${AGENTLTL_CC_PYTHON:-}" ) ]]; then
-        "$root/scripts/setup.sh" >&2 && py="$(find_python)"
+setup() {
+    # One build at a time: parallel tool calls each run this hook. mkdir is an atomic lock
+    # that works everywhere (flock does not exist on macOS).
+    local lock="${CLAUDE_PLUGIN_DATA:-$root}/.setup.lock" waited=0
+    mkdir -p "$(dirname "$lock")"
+    while ! mkdir "$lock" 2>/dev/null; do
+        sleep 1; waited=$((waited + 1))
+        if (( waited > 90 )); then rm -rf "$lock"; fi   # a crashed build left it behind
+    done
+    if [[ -z "$(find_python)" || "${1:-}" == "rebuild" ]]; then
+        "$root/scripts/setup.sh" >&2
     fi
+    rmdir "$lock"
+}
+
+py="$(find_python)"
+if [[ -z "$py" ]]; then
+    # First hook after an install, whichever it is: /reload-plugins does not fire SessionStart.
+    setup && py="$(find_python)"
+elif [[ "$1" == "SessionStart" && -z "${AGENTLTL_CC_PYTHON:-}" ]] \
+        && ! cmp -s "$root/vendor.lock" "$(dirname "$(dirname "$py")")/vendor.lock"; then
+    setup rebuild    # an update moved a dependency pin
 fi
 if [[ -z "$py" ]]; then
     # Not installed. Stay out of the way unless rules exist, in which case say so loudly.
