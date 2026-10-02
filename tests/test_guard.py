@@ -219,7 +219,7 @@ class TestMemoryFirst:
         assert run(g, "echo '- run tests first' >> CLAUDE.md", "echo x | tee .claude/rules/a.md",
                    ("Edit", {"file_path": "/h/.claude/projects/p/memory/MEMORY.md"})
                    ) == ["deny", "deny", "deny"]
-        assert "/agentltl-claude-code:rules skill" in g.decide(*write).reason
+        assert "/agentltl:rules skill" in g.decide(*write).reason
 
     def test_reading_memory_and_other_files_is_fine(self, tmp_path):
         g = self.guard(tmp_path)

@@ -7,6 +7,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=../scripts/env.sh
 source "$root/scripts/env.sh"
 
+env_migrate
 py="$(env_python)"
 if [[ -z "$py" ]]; then
     env_build && py="$(env_python)"

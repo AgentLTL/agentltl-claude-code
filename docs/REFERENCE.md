@@ -15,7 +15,7 @@ Install it as a Claude Code plugin; this repository is its own marketplace. In C
 
 ```
 /plugin marketplace add https://github.com/lailanelkoussy/agentltl-claude-code.git
-/plugin install agentltl-claude-code@agentltl
+/plugin install agentltl@agentltl
 ```
 
 Then turn on updates: `/plugin` → **Marketplaces** → `agentltl` → **Enable auto-update**. Or put
@@ -27,7 +27,7 @@ this in `~/.claude/settings.json`, which also installs it on any machine that ha
                           "url": "https://github.com/lailanelkoussy/agentltl-claude-code.git"},
                "autoUpdate": true}
 },
-"enabledPlugins": {"agentltl-claude-code@agentltl": true}
+"enabledPlugins": {"agentltl@agentltl": true}
 ```
 
 How it installs and updates:
@@ -39,7 +39,7 @@ How it installs and updates:
 - **Updates:** the plugin has no fixed version, so every push to `main` is an update. With
   auto-update on, Claude Code fetches it in the background a few minutes into a session and
   tells you to run `/reload-plugins`; otherwise it applies at the next launch. Without
-  auto-update, run `/plugin update agentltl-claude-code@agentltl`.
+  auto-update, run `/plugin update agentltl@agentltl`.
 - **The virtualenv:** it survives updates. It is rebuilt only when `vendor.lock` changes.
 
 ### From a clone (development)
@@ -118,7 +118,7 @@ replaces the user-level one.
 ### Writing rules in plain words
 
 Ask Claude ("add a rule that we never push to main"), or run
-`/agentltl-claude-code:rules <your rule in words>`. The skill:
+`/agentltl:rules <your rule in words>`. The skill:
 
 1. looks up the real tool names (`agentltl translate`, `agentltl tools`);
 2. drafts the rule;
@@ -182,7 +182,7 @@ When Claude is told "remember: never push to main", it tends to save that to mem
 rule can get forgotten. So the plugin adds one built-in rule, `memory-first` (mode `warn`):
 
 - **At session start**, Claude is told to put rules about tool calls in `AGENTLTL.yaml`
-  (through the `/agentltl-claude-code:rules` skill), and keep memory for what no rule can check: facts,
+  (through the `/agentltl:rules` skill), and keep memory for what no rule can check: facts,
   preferences, style.
 - **Each write to a memory file is refused once**, with that reminder. That covers `Write`,
   `Edit`, `echo … >> CLAUDE.md` and `tee`. If the content can't be a rule, Claude repeats the
@@ -259,7 +259,7 @@ rules:
   `library:NAME` or `built-in`.
 - **Editing from the command line:** `agentltl use` / `unuse` / `disable` / `enable` edit these
   lists without touching the rest of the file. Add `--user` for `~/.claude/AGENTLTL.yaml`.
-- **Choosing interactively:** `/agentltl-claude-code:setup` lets you tick entries.
+- **Choosing interactively:** `/agentltl:setup` lets you tick entries.
 
 To add an entry to the library, add a file to `library/` and a behaviour case to
 `tests/test_library.py`. Every entry must compile without lint warnings.
@@ -280,7 +280,7 @@ agentltl use|unuse NAME... [--user] switch packaged rules on or off (use: --mode
 agentltl disable|enable ID... [--user]  switch single rules off, or back on
 ```
 
-`/agentltl-claude-code:status` shows the guard's status.
+`/agentltl:status` shows the guard's status.
 
 ## Limits
 

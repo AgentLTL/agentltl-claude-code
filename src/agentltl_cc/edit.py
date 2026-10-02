@@ -13,7 +13,7 @@ from typing import Any, List
 
 import yaml
 
-NEW_FILE = ("# AGENTLTL.yaml – rules the agentltl-claude-code plugin enforces on every Claude Code\n"
+NEW_FILE = ("# AGENTLTL.yaml – rules the AgentLTL plugin enforces on every Claude Code\n"
             "# tool call. `agentltl library` lists packaged rules; add your own under `rules:`.\n"
             "\nrules: []\n")
 

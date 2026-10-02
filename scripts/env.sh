@@ -11,9 +11,24 @@
 env_data_dir() {
     if [[ -n "${CLAUDE_PLUGIN_DATA:-}" ]]; then echo "$CLAUDE_PLUGIN_DATA"; return; fi
     local d
-    for d in "$HOME"/.claude/plugins/data/agentltl-claude-code*/; do
-        if [[ -d "$d" ]]; then echo "${d%/}"; return; fi
+    # agentltl-agentltl: plugin `agentltl` from marketplace `agentltl`; before it was renamed
+    # the plugin was `agentltl-claude-code`.
+    for d in "$HOME"/.claude/plugins/data/agentltl-agentltl \
+             "$HOME"/.claude/plugins/data/agentltl-claude-code-agentltl; do
+        if [[ -d "$d" ]]; then echo "$d"; return; fi
     done
+}
+
+env_migrate() {
+    # Bring the session and project memory over from the plugin's name before the rename,
+    # once, so `scope: project` rules keep their history.
+    local old="$HOME/.claude/plugins/data/agentltl-claude-code-agentltl" data="${CLAUDE_PLUGIN_DATA:-}" d
+    [[ -n "$data" && "$data" != "$old" && -d "$old" && ! -e "$data/.migrated" ]] || return 0
+    mkdir -p "$data"
+    for d in sessions projects; do
+        if [[ -d "$old/$d" && ! -d "$data/$d" ]]; then cp -R "$old/$d" "$data/$d"; fi
+    done
+    touch "$data/.migrated"
 }
 
 env_venv() {

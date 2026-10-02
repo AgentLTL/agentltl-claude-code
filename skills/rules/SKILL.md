@@ -7,7 +7,7 @@ argument-hint: "<rule, e.g. never push to main>"
 
 # Writing AGENTLTL rules
 
-The agentltl-claude-code plugin checks every tool call Claude makes against `AGENTLTL.yaml` at the
+The AgentLTL plugin checks every tool call Claude makes against `AGENTLTL.yaml` at the
 project root (and `~/.claude/AGENTLTL.yaml` for rules that apply everywhere). Shell commands are
 parsed into structured calls first: `git commit -am x && git push -f` is checked as
 `git_commit{message: x, all: true}` then `git_push{force: true}`.

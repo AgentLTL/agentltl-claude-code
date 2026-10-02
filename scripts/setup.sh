@@ -46,4 +46,4 @@ if [[ "${1:-}" == "--dev" ]]; then
     "$pip" install -q -e "$root[dev]"
 fi
 cp "$root/vendor.lock" "$venv/vendor.lock"
-echo "agentltl-claude-code installed in $venv"
+echo "AgentLTL installed in $venv"

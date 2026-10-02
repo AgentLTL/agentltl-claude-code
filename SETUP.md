@@ -21,8 +21,11 @@ Run `python3 --version` and `git --version`.
 
 ## 2. Look for an earlier setup
 
-- **Already installed:** run `claude plugin list`. If `agentltl-claude-code@agentltl` is
+- **Already installed:** run `claude plugin list`. If `agentltl@agentltl` is
   listed, skip to step 4.
+- **Installed under its old name:** if `agentltl-claude-code@agentltl` is listed, the plugin was
+  renamed since. Run `claude plugin uninstall agentltl-claude-code@agentltl`, then continue
+  with step 3. The rules and the memory carry over.
 - **Hooks from a manual setup:** read `~/.claude/settings.json`. If its `hooks` contain
   commands ending in `hooks/run PreToolUse` (or `SessionStart`, `PostToolUse`) that point at an
   `agentltl-claude-code` or `agentltl-guard` folder, the guard was set up by hand from a
@@ -37,7 +40,7 @@ fails on machines without GitHub SSH keys.
 
 ```bash
 claude plugin marketplace add https://github.com/lailanelkoussy/agentltl-claude-code.git
-claude plugin install agentltl-claude-code@agentltl
+claude plugin install agentltl@agentltl
 ```
 
 If the first command says the marketplace already exists, run
@@ -68,11 +71,11 @@ The plugin builds its environment by itself the first time it runs. Building it 
 first rules can be tested before they go live, so run:
 
 ```bash
-plugin=$(ls -d ~/.claude/plugins/cache/agentltl/agentltl-claude-code/*/ | tail -1)
-CLAUDE_PLUGIN_DATA=~/.claude/plugins/data/agentltl-claude-code-agentltl "$plugin/scripts/setup.sh"
+plugin=$(ls -d ~/.claude/plugins/cache/agentltl/agentltl/*/ | tail -1)
+CLAUDE_PLUGIN_DATA=~/.claude/plugins/data/agentltl-agentltl "$plugin/scripts/setup.sh"
 ```
 
-It takes about 10 to 30 seconds and ends with `agentltl-claude-code installed in ...`. From now
+It takes about 10 to 30 seconds and ends with `AgentLTL installed in ...`. From now
 on, run the plugin's command line as `"$plugin/bin/agentltl"` (re-set `plugin` the same way if
 your shell forgot it). Once the plugin is loaded, it is on the PATH as plain `agentltl`.
 
@@ -105,10 +108,10 @@ Tell the user:
    then on, in every project that has an `AGENTLTL.yaml`.
 2. **Try it:** ask Claude to do something a rule forbids, and watch it get refused with the
    rule's reason.
-3. **Browse the library again:** `/agentltl-claude-code:setup`.
-4. **Add or remove rules in plain words:** `/agentltl-claude-code:rules never touch the
+3. **Browse the library again:** `/agentltl:setup`.
+4. **Add or remove rules in plain words:** `/agentltl:rules never touch the
    lockfile`, or "remove the rule about force-pushing", or just ask Claude.
-5. **See what it is doing:** `/agentltl-claude-code:status` shows the rules in force and
+5. **See what it is doing:** `/agentltl:status` shows the rules in force and
    what the guard recently blocked.
 
 ## Troubleshooting

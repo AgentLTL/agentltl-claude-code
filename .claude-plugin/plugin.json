@@ -1,6 +1,6 @@
 {
-  "name": "agentltl-claude-code",
-  "displayName": "AgentLTL for Claude Code",
+  "name": "agentltl",
+  "displayName": "AgentLTL",
   "description": "Project rules in AGENTLTL.yaml, enforced on every tool call (shell commands parsed into structured calls) with AgentLTL.",
   "author": {
     "name": "lailanelkoussy"
