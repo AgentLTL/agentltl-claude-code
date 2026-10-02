@@ -247,3 +247,22 @@ class TestProjectSpecs:
         g = guard_for("rules: [{id: r, never: kubectl_delete}]\n"
                       "tools:\n  kubectl: {extend: false, subcommands: {rollout: {}}}")
         assert g.translator.translate("kubectl delete pod x")[0].args.get("argv")
+
+
+class TestAskWording:
+    RULE = ("rules: [{id: no-rm-rf, never: {tool: rm, with: {recursive: true}}, "
+            "why: A recursive delete cannot be undone., mode: MODE}]")
+
+    def test_the_prompt_is_written_for_the_user_and_claude_gets_a_note(self):
+        v = guard_for(self.RULE.replace("MODE", "ask")).decide("Bash", {"command": "rm -rf build"})
+        assert v.action == "ask"
+        assert v.reason.splitlines()[0] == "AgentLTL: this call breaks the rule 'no-rm-rf'."
+        assert "Why the rule exists: A recursive delete cannot be undone." in v.reason
+        assert "Command: rm -rf build" in v.reason and v.reason.endswith("Allow this call anyway?")
+        assert "If they decline, do not retry it" in v.context
+
+    def test_retry_escalation_asks_the_same_way(self):
+        g = guard_for(self.RULE.replace("MODE", "retry"))
+        verdicts = [g.decide("Bash", {"command": "rm -rf build"}) for _ in range(3)]
+        assert [v.action for v in verdicts] == ["deny", "deny", "ask"]   # retries: 3
+        assert "Claude was refused 2 time(s)" in verdicts[-1].reason

@@ -139,8 +139,8 @@ checked. This rule is on by default; turn it off with `disable: [memory-first]`.
 |---|---|
 | `block` (default) | Refused every time |
 | `warn` | Refused once; Claude may repeat the exact call to override |
-| `ask` | You decide |
-| `retry` | Refused; after 3 tries you're asked |
+| `ask` | You're asked to approve it; Claude can't override |
+| `retry` | Refused twice; the third try asks you (`settings.retries`) |
 | `stop` | Refused, and Claude stops |
 | `log` | Allowed; Claude is told it broke the rule |
 

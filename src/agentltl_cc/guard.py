@@ -54,10 +54,12 @@ _TAILS = {
             "repeating exactly the same call as your next action; otherwise comply.",
     "retry": "Change your approach to satisfy the rule. If you keep getting blocked, the user "
              "will be asked to decide.",
-    "ask": "The user has been asked whether to allow this call.",
     "stop": "This rule stops the session. Stop working and tell the user what you were trying "
             "to do and why.",
 }
+# Told to Claude alongside a prompt the user answers (mode: ask, or retry escalating).
+_ASKED = ("AGENTLTL rule '{name}' asked the user to approve this call. If they decline, do not "
+          "retry it or work around the rule; ask the user what they want instead.")
 
 
 @dataclass
@@ -362,10 +364,10 @@ class Guard:
                 # the next refusal starts a fresh round of retries for Claude
                 enf._soft_block_counts[exc.constraint_name] = 0
                 enf._consecutive_soft_block_counts[exc.constraint_name] = 0
-                reason = self._message(rule, exc.constraint_name, detail, segment, tail=(
-                    f"Claude has been blocked by this rule {attempts} time(s); you decide "
-                    "whether this call may run."))
-                return Verdict("ask", reason, rule=exc.constraint_name, calls=shown)
+                reason = self._ask_message(rule, exc.constraint_name, detail, segment, intro=(
+                    f"Claude was refused {attempts - 1} time(s) by this rule and is trying again."))
+                return Verdict("ask", reason, context=_ASKED.format(name=exc.constraint_name),
+                               rule=exc.constraint_name, calls=shown)
             reason = self._message(rule, exc.constraint_name, detail, segment, mode="stop")
             return Verdict("stop", reason, rule=exc.constraint_name, calls=shown)
 
@@ -383,9 +385,12 @@ class Guard:
         if mode == "retry":
             n = enf._soft_block_counts.get(name, 0)
             tail = (f"Attempt {n} of {self.ruleset.settings.retries}. " + _TAILS["retry"])
+        if mode == "ask":
+            reason = self._ask_message(rule, name, detail, segment)
+            notes = "\n".join(n for n in (_ASKED.format(name=name), notes) if n)
+            return Verdict("ask", reason, context=notes, rule=name, calls=shown)
         reason = self._message(rule, name, detail, segment, mode=mode, tail=tail)
-        return Verdict("ask" if mode == "ask" else "deny", reason, context=notes, rule=name,
-                       calls=shown)
+        return Verdict("deny", reason, context=notes, rule=name, calls=shown)
 
     def record(self, tool_name: str, tool_input: Dict[str, Any], tool_id: str,
                result: Any) -> None:
@@ -445,6 +450,20 @@ class Guard:
             if c.name == name and (args is None or c.args == args):
                 return c.meta.get("source", "")
         return ""
+
+    @staticmethod
+    def _ask_message(rule: Optional[Rule], name: str, detail: str, segment: str,
+                     intro: str = "") -> str:
+        """The permission prompt the user reads: what the rule protects, and the question."""
+        lines = [f"AgentLTL: this call breaks the rule '{name}'.", intro]
+        if rule and rule.why:
+            lines.append(f"Why the rule exists: {rule.why}")
+        if detail:
+            lines.append(f"What breaks it: {detail}")
+        if segment:
+            lines.append(f"Command: {segment}")
+        lines.append("Claude cannot override this rule. Allow this call anyway?")
+        return "\n".join(line for line in lines if line)
 
     def _message(self, rule: Optional[Rule], name: str, detail: str, segment: str, *,
                  mode: Optional[str] = None, tail: Optional[str] = None) -> str:

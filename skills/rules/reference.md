@@ -138,7 +138,7 @@ user says "ever", "already", "once per project" or "in any session", that is `pr
 |---|---|---|
 | `block` | denied, every time | only the user (edit the rule, or run the command themselves) |
 | `warn` | denied once, with the reason | Claude, by repeating the exact same call next |
-| `retry` | denied; after `retries` refusals the user is asked | the user, after the retries |
+| `retry` | denied; the `retries`-th try (default: the third) asks the user | the user, after the retries |
 | `ask` | the user gets a permission prompt with the reason | the user |
 | `stop` | denied and Claude stops working | the user |
 | `log` | allowed; Claude is told it broke the rule | n/a |

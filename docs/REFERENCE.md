@@ -167,8 +167,8 @@ other already has history.
 |---|---|---|
 | `block` (default) | PERSISTENT_BLOCK | Denied every time. Claude cannot override. |
 | `warn` | BLOCK_AND_WARN | Denied once. Claude may override by repeating the exact call. |
-| `retry` | SOFT_BLOCK | Denied. After `settings.retries` refusals, you are asked. |
-| `ask` | PERSISTENT_BLOCK | You get a permission prompt with the reason. |
+| `retry` | SOFT_BLOCK | Denied. The `settings.retries`-th try (default: the third) asks you. |
+| `ask` | PERSISTENT_BLOCK | You get a permission prompt saying which rule the call breaks and why; you approve or refuse. Claude cannot override it. In `claude -p` (no one to ask) it is denied. |
 | `stop` | HARD_STOP | Denied, and Claude stops. |
 | `log` | TOLERATE | Allowed. Claude is told it broke the rule. |
 
