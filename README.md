@@ -29,8 +29,9 @@ this in `~/.claude/settings.json`, which also installs it on any machine that ha
 How it installs and updates:
 
 - **Python:** it needs Python 3.10+ and git on the machine. The first session start builds a
-  virtualenv in the plugin's data directory, which takes about 10 seconds. It installs AgentLTL
-  and cli-to-tools from GitHub at the commits pinned in `vendor.lock`.
+  virtualenv in the plugin's data directory, which takes about 10 seconds. It copies in
+  AgentLTL and cli-to-tools from the plugin's pinned submodules, or, if those are missing,
+  installs them from GitHub at the commits in `vendor.lock`.
 - **Updates:** the plugin has no fixed version, so every push to `main` is an update. With
   auto-update on, Claude Code fetches it in the background a few minutes into a session and
   tells you to run `/reload-plugins`; otherwise it applies at the next launch. Without
@@ -272,4 +273,5 @@ scripts/setup.sh --dev
 ```
 
 When you move a submodule pin, update `vendor.lock` to the same commit; `tests/test_packaging.py`
-fails until they match, because marketplace installs (which have no submodules) install from it.
+fails until they match. The hooks rebuild an installed plugin's virtualenv when `vendor.lock`
+changes, so a moved pin that skips `vendor.lock` never reaches existing installs.

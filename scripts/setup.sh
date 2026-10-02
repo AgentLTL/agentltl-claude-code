@@ -21,11 +21,16 @@ python="${PYTHON:-python3}"
 pip="$venv/bin/pip"
 "$pip" install -q --upgrade pip
 
+# Editable installs only for development: a plugin install lives in a versioned directory
+# that Claude Code deletes some days after an update, so it must get real copies.
+editable=""
+[[ "${1:-}" == "--dev" ]] && editable="-e"
+
 while read -r name url commit; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     case "$name" in agentltl) dir=AgentLTL ;; *) dir="$name" ;; esac
     if [[ -f "$root/vendor/$dir/pyproject.toml" ]]; then
-        "$pip" install -q -e "$root/vendor/$dir"
+        "$pip" install -q $editable "$root/vendor/$dir"
     else
         "$pip" install -q "$name @ git+$url@$commit"
     fi
