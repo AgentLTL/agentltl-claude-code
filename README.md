@@ -54,7 +54,7 @@ and run `/reload-plugins`.
 
 ## Picking ready-made rules
 
-The plugin comes with a library of tested rules. Run `/agentltl-claude-code:agentltl-setup`,
+The plugin comes with a library of tested rules. Run `/agentltl-claude-code:setup`,
 tick the ones you want, and you're done:
 
 | Rule | What it does |
@@ -89,7 +89,7 @@ Just ask Claude in plain words:
 >
 > Remove the rule that stops me from pushing to main.
 
-Or use `/agentltl-claude-code:agentltl-rules <your rule>`. Claude writes the rule, tests it
+Or use `/agentltl-claude-code:rules <your rule>`. Claude writes the rule, tests it
 against examples it should and shouldn't catch, shows you the result, and saves it.
 
 The rules live in `AGENTLTL.yaml`, which you can also edit yourself:
@@ -142,7 +142,7 @@ Each rule has a `mode`; pick how strict it should be:
 - **Updates are automatic.** With auto-update on, new versions arrive in the background.
 - **You can turn it off.** Delete `AGENTLTL.yaml` (it then does nothing), or run
   `/plugin` and disable `agentltl-claude-code`.
-- **You can see what it's doing.** `/agentltl-claude-code:agentltl` shows the rules in force and
+- **You can see what it's doing.** `/agentltl-claude-code:status` shows the rules in force and
   what it blocked recently.
 
 ## More

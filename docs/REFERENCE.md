@@ -118,7 +118,7 @@ replaces the user-level one.
 ### Writing rules in plain words
 
 Ask Claude ("add a rule that we never push to main"), or run
-`/agentltl-claude-code:agentltl-rules <your rule in words>`. The skill:
+`/agentltl-claude-code:rules <your rule in words>`. The skill:
 
 1. looks up the real tool names (`agentltl translate`, `agentltl tools`);
 2. drafts the rule;
@@ -182,7 +182,7 @@ When Claude is told "remember: never push to main", it tends to save that to mem
 rule can get forgotten. So the plugin adds one built-in rule, `memory-first` (mode `warn`):
 
 - **At session start**, Claude is told to put rules about tool calls in `AGENTLTL.yaml`
-  (through the `agentltl-rules` skill), and keep memory for what no rule can check: facts,
+  (through the `/agentltl-claude-code:rules` skill), and keep memory for what no rule can check: facts,
   preferences, style.
 - **Each write to a memory file is refused once**, with that reminder. That covers `Write`,
   `Edit`, `echo … >> CLAUDE.md` and `tee`. If the content can't be a rule, Claude repeats the
@@ -205,7 +205,7 @@ happens to them is set by `settings.unparseable`:
 ## Rules
 
 The full reference, with worked examples, is in
-[`skills/agentltl-rules/reference.md`](../skills/agentltl-rules/reference.md).
+[`skills/rules/reference.md`](../skills/rules/reference.md).
 
 | Kind | Meaning |
 |---|---|
@@ -236,7 +236,7 @@ can name the arguments of commands the bundled packs don't cover.
   there.
 
 The details are in "When a command needs a spec" in
-[`skills/agentltl-rules/reference.md`](../skills/agentltl-rules/reference.md).
+[`skills/rules/reference.md`](../skills/rules/reference.md).
 
 ### The rule library
 
@@ -259,7 +259,7 @@ rules:
   `library:NAME` or `built-in`.
 - **Editing from the command line:** `agentltl use` / `unuse` / `disable` / `enable` edit these
   lists without touching the rest of the file. Add `--user` for `~/.claude/AGENTLTL.yaml`.
-- **Choosing interactively:** `/agentltl-claude-code:agentltl-setup` lets you tick entries.
+- **Choosing interactively:** `/agentltl-claude-code:setup` lets you tick entries.
 
 To add an entry to the library, add a file to `library/` and a behaviour case to
 `tests/test_library.py`. Every entry must compile without lint warnings.
@@ -280,7 +280,7 @@ agentltl use|unuse NAME... [--user] switch packaged rules on or off (use: --mode
 agentltl disable|enable ID... [--user]  switch single rules off, or back on
 ```
 
-`/agentltl-claude-code:agentltl` shows the guard's status.
+`/agentltl-claude-code:status` shows the guard's status.
 
 ## Limits
 

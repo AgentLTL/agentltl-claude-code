@@ -1,7 +1,8 @@
 ---
-name: agentltl-setup
-description: Let the user pick AGENTLTL rules from the plugin's library of ready-made rules (no force-push, tests before push, subagents on Sonnet, protect .env, ask before installing...) and switch them on for this project or every project. Use on first setup, or when the user asks what rules are available, wants to browse or change their packaged rules, or says "set up agentltl".
-argument-hint: "[--user]"
+name: setup
+description: Pick ready-made rules to switch on
+when_to_use: First setup of AgentLTL, or when the user asks which AGENTLTL rules are available, wants to browse, switch on or switch off packaged rules from the plugin's library, or says "set up agentltl".
+argument-hint: "[--user: for every project]"
 ---
 
 # Choosing packaged rules
@@ -32,7 +33,7 @@ Arguments: `$ARGUMENTS` (`--user` means rules for every project, in `~/.claude/A
 
 4. **Ask about strictness** only if the user wants it. Every entry has a sensible default
    mode. To change it, use `agentltl use NAME --mode warn`. The modes are block, warn, ask,
-   retry, stop and log; see the `agentltl-rules` skill's reference.md.
+   retry, stop and log; see the `/agentltl-claude-code:rules` skill's reference.md.
 
 5. **Apply the choices**, adding `--user` for every project:
    - `agentltl use NAME...` for the newly ticked entries;
@@ -48,7 +49,7 @@ Arguments: `$ARGUMENTS` (`--user` means rules for every project, in `~/.claude/A
      differently, offer to write a project rule with the same id: it replaces the packaged one.
    - `agentltl library NAME` shows a rule's YAML in full.
 
-7. **Offer custom rules**: for anything the library doesn't cover, use the `agentltl-rules`
+7. **Offer custom rules**: for anything the library doesn't cover, use the `/agentltl-claude-code:rules`
    skill to write a rule from the user's own words.
 
 Changes apply from the next tool call. No restart is needed.

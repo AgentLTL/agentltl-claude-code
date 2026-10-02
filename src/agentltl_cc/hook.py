@@ -116,7 +116,7 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
             lines.append(f"- memory-first [{r.mode}]: before you save anything to memory "
                          "(CLAUDE.md, CLAUDE.local.md, .claude/rules/, auto memory), ask whether "
                          "it is a rule about tool calls or commands. If it is, add it to "
-                         "AGENTLTL.yaml with the agentltl-rules skill instead: rules there are "
+                         "AGENTLTL.yaml with the /agentltl-claude-code:rules skill instead: rules there are "
                          "enforced, memory can be forgotten.")
             continue
         why = f" — {r.why}" if r.why else ""

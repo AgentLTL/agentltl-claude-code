@@ -1,7 +1,7 @@
 ---
-name: agentltl
-description: Show the AgentLTL for Claude Code's status for this project, including the rules in force, what it recorded this session, and what it blocked. It can also reset the session trace.
-argument-hint: "[status | trace | reset | check <command>...]"
+name: status
+description: Show the rules in force and what they blocked
+argument-hint: "[trace | reset | check <command>]"
 disable-model-invocation: true
 ---
 
@@ -21,5 +21,5 @@ Report on the AgentLTL for Claude Code. Requested: `$ARGUMENTS` (empty means `st
   2. Then run `agentltl reset`.
 - **check <steps>**: run `agentltl check <steps>` and explain each outcome.
 
-To pick packaged rules, use the `agentltl-setup` skill. To add, change or remove rules, use
-the `agentltl-rules` skill.
+To pick packaged rules, use the `/agentltl-claude-code:setup` skill. To add, change or remove rules, use
+the `/agentltl-claude-code:rules` skill.

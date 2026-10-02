@@ -1,7 +1,8 @@
 ---
-name: agentltl-rules
-description: Turn a natural-language rule ("never force-push", "run the tests before pushing", "don't touch .env") into AgentLTL rules in AGENTLTL.yaml, test them, and add them. Use when the user asks to add, change, remove, switch off, explain or debug an AGENTLTL rule ("remove the rule about force-pushing", "stop blocking rm -rf"), or to translate a policy into AgentLTL / LTL constraints for this project. Also use it instead of saving to memory (CLAUDE.md, auto memory) whenever what you would remember says which tool calls or commands to make, avoid, or make first ("remember to never…", "from now on always … before …").
-argument-hint: "<rule in plain words>"
+name: rules
+description: Add, change or remove a rule, in plain words
+when_to_use: The user asks to add, change, remove, switch off, explain or debug an AGENTLTL rule ("never force-push", "run the tests before pushing", "don't touch .env", "remove the rule about force-pushing", "stop blocking rm -rf"), or to translate a policy into AgentLTL / LTL constraints. Also use it instead of saving to memory (CLAUDE.md, auto memory) whenever what you would remember says which tool calls or commands to make, avoid, or make first ("remember to never...", "from now on always ... before ...").
+argument-hint: "<rule, e.g. never push to main>"
 ---
 
 # Writing AGENTLTL rules
@@ -14,7 +15,7 @@ parsed into structured calls first: `git commit -am x && git push -f` is checked
 The user's request: $ARGUMENTS
 
 Rule kinds, target syntax, modes and worked examples are in
-[reference.md](${CLAUDE_PLUGIN_ROOT}/skills/agentltl-rules/reference.md). Read it before you
+[reference.md](${CLAUDE_PLUGIN_ROOT}/skills/rules/reference.md). Read it before you
 write a rule.
 
 If the user wants to remove, switch off or loosen a rule, go to

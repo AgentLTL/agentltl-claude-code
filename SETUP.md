@@ -79,13 +79,13 @@ your shell forgot it). Once the plugin is loaded, it is on the PATH as plain `ag
 ## 6. Choose the first rules, with the user
 
 The plugin ships a library of tested rules the user can switch on by name. Start there:
-read `$plugin/skills/agentltl-setup/SKILL.md` and follow it. Until the plugin is loaded,
+read `$plugin/skills/setup/SKILL.md` and follow it. Until the plugin is loaded,
 `agentltl` is not on the PATH, so write `"$plugin/bin/agentltl"` wherever that file says
 `agentltl`. Run the commands from the project root.
 
 Then ask whether there is anything else Claude should never do, or always do first, in this
-project. For each answer, write a rule following `$plugin/skills/agentltl-rules/SKILL.md`. The
-rule format is in `$plugin/skills/agentltl-rules/reference.md`. In short:
+project. For each answer, write a rule following `$plugin/skills/rules/SKILL.md`. The
+rule format is in `$plugin/skills/rules/reference.md`. In short:
 
 - **Tool names:** rules use the names commands translate to. Check with
   `"$plugin/bin/agentltl" translate "git push --force"`.
@@ -105,10 +105,10 @@ Tell the user:
    then on, in every project that has an `AGENTLTL.yaml`.
 2. **Try it:** ask Claude to do something a rule forbids, and watch it get refused with the
    rule's reason.
-3. **Browse the library again:** `/agentltl-claude-code:agentltl-setup`.
-4. **Add or remove rules in plain words:** `/agentltl-claude-code:agentltl-rules never touch the
+3. **Browse the library again:** `/agentltl-claude-code:setup`.
+4. **Add or remove rules in plain words:** `/agentltl-claude-code:rules never touch the
    lockfile`, or "remove the rule about force-pushing", or just ask Claude.
-5. **See what it is doing:** `/agentltl-claude-code:agentltl` shows the rules in force and
+5. **See what it is doing:** `/agentltl-claude-code:status` shows the rules in force and
    what the guard recently blocked.
 
 ## Troubleshooting

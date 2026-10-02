@@ -238,8 +238,8 @@ MEMORY_FIRST: Dict[str, Any] = {
     "why": "AGENTLTL rules are enforced on every call; memory can be forgotten. If what you are "
            "saving says which tool calls or commands to make, avoid, or make first (never X, "
            "always Y before Z, at most N times, only with these arguments), add it to "
-           "AGENTLTL.yaml instead, using the agentltl-rules skill, and leave it out of memory.",
-    "fix": "Write the rule with the agentltl-rules skill. Keep in memory only what no rule can "
+           "AGENTLTL.yaml instead, using the /agentltl-claude-code:rules skill, and leave it out of memory.",
+    "fix": "Write the rule with the /agentltl-claude-code:rules skill. Keep in memory only what no rule can "
            "check (facts, preferences, style). If nothing here can be a rule, repeat this exact "
            "call to save it.",
 }
