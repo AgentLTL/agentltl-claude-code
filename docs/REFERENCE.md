@@ -253,6 +253,17 @@ This cuts both ways:
     `first: [pytest, {tool: make, with: {argv: test}}, {tool: npm, with: {argv: test}}]`.
   - `agentltl translate "<command>"` shows how a command is seen.
 
+### What counts as writing a file
+
+- **Covered:** the guard sees the target of redirections (`>`, `>>`, `2>`, `&>`, and the
+  heredoc form `cat <<EOF > f`), in-place editors (`sed -i`, `perl -pi`, `awk -i inplace`,
+  `ed`, `vim`), `tee`, `sponge`, `cp`/`mv` (including `-t`), `install`, `dd of=`,
+  `truncate`, `shred`, `split`, archive extraction directories, `curl -o`/`-O`, `wget -O`,
+  and the files inside a `patch` or `git apply` diff.
+- **Unknown at check time:** when the files are only known at run time (`xargs`,
+  `find -exec … {}`, an unset `$VARIABLE`), path rules treat the call as a possible match
+  instead of letting it through.
+
 ### To do
 
 - **Follow `cd` inside a command line.** Relative paths are resolved against the session's

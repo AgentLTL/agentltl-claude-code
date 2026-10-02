@@ -29,6 +29,7 @@ A target says which calls a rule is about.
 |---|---|
 | `git_push` | any `git push` |
 | `[Edit, Write]` | either tool |
+| `"kubectl_*"` | any tool whose name matches the glob (every kubectl subcommand) |
 | `{tool: git_push, with: {force: true}}` | exact argument values |
 | `{tool: [Edit, Write], where: {file_path: "*.lock"}}` | glob on argument values |
 | `{tool: [rm, cat], where: {"*": "**/.env"}}` | glob on ANY argument |
@@ -44,6 +45,10 @@ How matching works:
     when the pattern has no `/`.
   - Several patterns in a list mean any of them.
 - **Several keys** in `with` or `where` must ALL match.
+- **Files known only at run time** (`ls | xargs rm`, `find . -exec rm {} +`, `rm $UNSET`)
+  count as a *possible* match for a path condition. `never` refuses them, `require` cannot
+  confirm them so it refuses too, and they never satisfy the `first` side of a `before`.
+  `F=x; rm $F` and `$HOME` are resolved, so they are judged normally.
 - **`exists`** is checked on disk when the call is made. Earlier calls in the trace are judged
   against the disk as it is now.
 
@@ -51,7 +56,15 @@ Use `agentltl translate "<command>"` to see names and arguments; `agentltl valid
 about a tool or argument name that nothing produces (such a rule never fires, or, for
 `require`, fires on every call). Commands with no spec become a
 tool named after the executable, with a single `argv` list (`where: {argv: "--prod"}`). Output
-redirections (`> file`, `>> file`) appear as `redirect_to`.
+redirections (`> file`, `>> file`, `2> file`, `&> file`, `cat <<EOF > file`) appear as
+`redirect_to`, input redirections (`< file`) as `redirect_from`. `patch` and `git apply` list
+the files their diff modifies as `paths`, and `curl -O` its output file as `output`.
+
+Runners and package managers (`make`, `npm`, `yarn`, `cargo`, `go`, `uv`, `poetry`, `conda`,
+`apt`, `brew`) have no spec on purpose: name them as `{tool: npm, with: {argv: install}}`.
+CLIs with specs name their subcommands: `kubectl_delete`, `terraform_apply`, `gh_pr_merge`,
+`aws_s3_rm`, `git_apply`; the in-place editors `sed`, `perl` and `awk` expose `in_place` and
+`paths`.
 
 ## Variables: the same value in two calls
 

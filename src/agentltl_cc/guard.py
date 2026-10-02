@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
-from .match import Paths, normalize_paths
+from .match import UNKNOWN_PATHS, Paths, has_unknown_path, normalize_paths
 from .rules import MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
@@ -76,24 +76,105 @@ class Verdict:
 
 
 class GuardTranslator(Translator):
-    """cli-to-tools translator that also exposes output redirections as ``redirect_to``.
+    """cli-to-tools translator with what file rules need on top:
 
-    ``echo x > .env`` then matches ``where: {redirect_to: "**/.env"}`` like a Write would.
+    - ``redirect_to`` / ``redirect_from``: files a redirection writes (``> f``, ``>> f``,
+      ``2> f``, ``&> f``, ``cat <<EOF > f``) or reads (``< f``);
+    - path arguments made absolute (see :func:`normalize_paths`);
+    - ``unknown_paths``: the call's files are only known at run time (``xargs rm``,
+      ``find -exec rm {}``, ``rm $UNSET``);
+    - for ``patch`` / ``git apply``, the files the diff modifies, as ``paths``;
+    - for ``curl -O``, the file it writes, as ``output``.
     """
 
     paths: Optional[Paths] = None
 
     def _call(self, node: Any, command: str, call_id: str, index: int) -> ToolCall:
         call = super()._call(node, command, call_id, index)
+        writes, reads = _redirect_files(node.redirects)
+        if writes:
+            call.args["redirect_to"] = writes
+        if reads:
+            call.args["redirect_from"] = reads
         if self.paths is not None:
+            if call.name in ("patch", "git_apply"):
+                _patch_targets(call, self.paths)
+            if call.name == "curl" and call.args.get("remote_name") and not call.args.get("output"):
+                _curl_output(call)
             call.args = normalize_paths(call.args, self.paths)
-        targets = [r["target"] for r in node.redirects
-                   if r.get("target") and ">" in r.get("op", "") and r.get("fd") not in ("2",)
-                   and not r["target"].startswith("&")]
-        if targets:
-            call.args["redirect_to"] = (normalize_paths({"redirect_to": targets}, self.paths)
-                                        ["redirect_to"] if self.paths else targets)
+        if node.wrapper == "xargs" or has_unknown_path(call.args):
+            call.args[UNKNOWN_PATHS] = True
         return call
+
+
+def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[str]]":
+    writes: List[str] = []
+    reads: List[str] = []
+    for r in redirects:
+        op, target = r.get("op", ""), r.get("target", "")
+        if not target:
+            continue
+        if op in (">&", "<&") and (target.isdigit() or target == "-"):
+            continue                       # 2>&1: copies a descriptor, no file
+        if op in (">", ">>", ">|", "&>", "&>>", ">&"):
+            writes.append(target)
+        elif op == "<":
+            reads.append(target)
+    return writes, reads
+
+
+def _patch_targets(call: ToolCall, paths: Paths) -> None:
+    """Read the diff a ``patch`` / ``git apply`` will apply and list the files it touches."""
+    a = call.args
+    diffs = [a.get("input"), a.get("patchfile"), *(a.get("patches") or []),
+             *(a.get("redirect_from") or [])]
+    diffs = [d for d in diffs if d]
+    strip = a.get("strip")
+    strips = [int(strip)] if str(strip or "").isdigit() else (
+        [1] if call.name == "git_apply" else [0, 1])
+    found: List[str] = []
+    readable = bool(diffs)
+    for diff in diffs:
+        path = os.path.join(paths.cwd or os.getcwd(), os.path.expanduser(diff))
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(2_000_000)
+        except OSError:
+            readable = False
+            continue
+        for name in _diff_files(text):
+            for n in strips:
+                parts = name.split("/")
+                if len(parts) > n:
+                    found.append("/".join(parts[n:]))
+    if found:
+        a["paths"] = list(dict.fromkeys(found))
+    if not readable:
+        a[UNKNOWN_PATHS] = True
+
+
+def _diff_files(text: str) -> List[str]:
+    names: List[str] = []
+    for line in text.splitlines():
+        if line.startswith(("--- ", "+++ ")):
+            name = line[4:].split("\t")[0].strip()
+        elif line.startswith(("rename to ", "rename from ", "copy to ")):
+            name = line.split(" ", 2)[2].strip()
+        else:
+            continue
+        if name and name != "/dev/null":
+            names.append(name)
+    return list(dict.fromkeys(names))
+
+
+def _curl_output(call: ToolCall) -> None:
+    from urllib.parse import urlparse
+    urls = call.args.get("urls") or []
+    names = [os.path.basename(urlparse(u).path) for u in urls]
+    names = [n for n in names if n]
+    if names:
+        out_dir = call.args.get("output_dir") or ""
+        call.args["output"] = [os.path.join(out_dir, n) for n in names]
 
 
 def translator_for(ruleset: RuleSet) -> GuardTranslator:
@@ -134,7 +215,7 @@ def lint(ruleset: RuleSet, registry: Optional[SpecRegistry] = None) -> List[str]
         for target in _flatten(rule.targets):
             keys = set(target.with_) | set(target.where) | set(target.variables)
             for tool in target.tools:
-                if tool[:1].isupper() or tool.startswith("mcp__"):
+                if tool[:1].isupper() or tool.startswith("mcp__") or "*" in tool:
                     continue
                 if tool in schemas:
                     unknown = sorted(k for k in keys - set(_ANY_TOOL_ARGS) if k not in schemas[tool])

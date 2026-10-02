@@ -60,7 +60,11 @@ rules:
   - id: read-before-overwrite
     before:
       first: {tool: Read, with: {file_path: $f}}
-      then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}
+      then:
+        - {tool: [Edit, Write], with: {file_path: $f}, exists: true}
+        - {tool: [sed, perl, tee], with: {paths: $f}, exists: true}   # in-place edits, tee
+        - {tool: sponge, with: {file: $f}, exists: true}
+        - {tool: "*", with: {redirect_to: $f}, exists: true}          # > file, >> file
     why: Read a file before replacing it.
 
   # Decision log before anything destructive.
@@ -73,7 +77,7 @@ rules:
   # A runbook that enforces itself.
   - id: drain-before-reboot
     before:
-      first: {tool: kubectl, with: {argv: drain}}
+      first: kubectl_drain
       then: {tool: ssh, where: {command: "*reboot*"}}
     scope: project
     why: Drain the node before rebooting it.

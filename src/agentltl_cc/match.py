@@ -48,7 +48,12 @@ class RuleError(ValueError):
 
 # Arguments holding file paths, in Claude Code tools and in the cli-to-tools packs.
 PATH_KEYS = ("file_path", "notebook_path", "path", "paths", "file", "files", "redirect_to",
-             "directory")
+             "redirect_from", "directory", "sources", "destination", "destination_dir", "of",
+             "if", "archive", "input", "patchfile", "patches", "script_file", "program_file")
+
+# Set on a call whose file arguments are only known at run time: `xargs rm`, `find -exec rm
+# {}`, `rm $UNSET`. A path condition on such a call is answered "maybe", never "no".
+UNKNOWN_PATHS = "unknown_paths"
 
 
 @dataclass(frozen=True)
@@ -68,27 +73,43 @@ class Target:
     variables: Dict[str, str] = field(default_factory=dict)   # argument -> variable name
 
     def matches(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> bool:
-        if name not in self.tools:
+        return self.match(name, args, paths) is True
+
+    def match(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> Optional[bool]:
+        """True, False, or None for "maybe": a path condition on a call whose file
+        arguments are only known at run time (see UNKNOWN_PATHS)."""
+        if not tool_matches(name, self.tools):
             return False
         args = args or {}
+        unknown = bool(args.get(UNKNOWN_PATHS))
+        maybe = False
         for key, expected in self.with_.items():
             actual = args.get(key)
             if not _equal(expected, actual) and not (
                     key in PATH_KEYS and isinstance(expected, str)
                     and _equal(_absolute(expected, paths), actual)):
+                if unknown and key in PATH_KEYS:
+                    maybe = True
+                    continue
                 return False
         hits: List[str] = []
         for key, patterns in self.where.items():
             values = _strings(list(args.values()) if key == "*" else args.get(key))
             found = [v for v in values if any(_glob(v, p, paths) for p in patterns)]
             if not found:
+                if unknown and (key == "*" or key in PATH_KEYS):
+                    maybe = True
+                    continue
                 return False
             hits += found
         if self.exists is not None:
             if not self.where:   # no glob narrowed it: judge the path arguments themselves
                 hits = [v for key in PATH_KEYS for v in _strings(args.get(key))]
-            return any(os.path.exists(_absolute(v, paths)) == self.exists for v in hits)
-        return True
+            if not any(os.path.exists(_absolute(v, paths)) == self.exists for v in hits):
+                if not unknown:
+                    return False
+                maybe = True
+        return None if maybe else True
 
     def describe(self) -> str:
         tools = " or ".join(self.tools)
@@ -111,7 +132,13 @@ class AnyTarget:
         return tuple(dict.fromkeys(t for target in self.targets for t in target.tools))
 
     def matches(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> bool:
-        return any(t.matches(name, args, paths) for t in self.targets)
+        return self.match(name, args, paths) is True
+
+    def match(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> Optional[bool]:
+        results = [t.match(name, args, paths) for t in self.targets]
+        if True in results:
+            return True
+        return None if None in results else False
 
     def describe(self) -> str:
         return " or ".join(t.describe() for t in self.targets)
@@ -140,6 +167,11 @@ def parse_target(spec: Any, where: str, *, with_: Any = None, where_: Any = None
                                   _patterns(where_, "where")))
 
 
+def tool_matches(name: str, tools: Tuple[str, ...]) -> bool:
+    """Whether *name* is one of *tools*; a name with ``*`` is a glob (``kubectl_*``)."""
+    return name in tools or any("*" in t and fnmatch.fnmatchcase(name, t) for t in tools)
+
+
 def _with_variables(target: Target) -> Target:
     """Move ``$name`` values out of ``with`` into ``variables``."""
     for key, value in list(target.with_.items()):
@@ -162,9 +194,22 @@ def normalize_paths(args: Dict[str, Any], paths: Paths) -> Dict[str, Any]:
 
 
 def _canonical(value: str, paths: Paths) -> str:
-    if not value or value.startswith(("-", "http://", "https://", "$")):
+    home = os.path.expanduser("~")
+    for prefix in ("${HOME}", "$HOME"):
+        if value == prefix or value.startswith(prefix + "/"):
+            value = home + value[len(prefix):]
+    if not value or value.startswith(("-", "http://", "https://", "$")) or "://" in value:
         return value
     return _absolute(value, paths)
+
+
+def has_unknown_path(args: Dict[str, Any]) -> bool:
+    """Whether a path argument holds a value only known at run time."""
+    for key in PATH_KEYS:
+        for value in _strings(args.get(key)):
+            if "$" in value or "`" in value or "{}" in value or "<(" in value:
+                return True
+    return False
 
 
 def _names(spec: Any, where: str) -> Tuple[str, ...]:

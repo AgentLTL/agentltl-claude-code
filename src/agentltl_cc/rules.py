@@ -44,7 +44,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 
-from .match import Paths, RuleError, parse_target
+from .match import Paths, RuleError, parse_target, tool_matches
+
+_MAYBE = (" Its file arguments are only known at run time (xargs, find -exec, or a $VARIABLE),"
+          " so the guard cannot rule it out; name the files explicitly.")
 
 FILE_NAME = "AGENTLTL.yaml"
 
@@ -377,8 +380,11 @@ def _never(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
 
     def check(calls: List[Any]) -> Optional[str]:
         c = calls[-1]
-        if target.matches(c.name, c.args, paths):
+        hit = target.match(c.name, c.args, paths)
+        if hit is True:
             return f"{c.name} is not allowed: it matches {target.describe()}."
+        if hit is None:
+            return f"{c.name} may match {target.describe()}." + _MAYBE
         return None
 
     return _predicate(check, f"never {target.describe()}"), target.tools, target
@@ -403,12 +409,12 @@ def _before(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
 
     def check(calls: List[Any]) -> Optional[str]:
         c = calls[-1]
-        if not b.matches(c.name, c.args, paths):
+        if b.match(c.name, c.args, paths) is False:
             return None
         start = -1
-        if since is not None:
+        if since is not None:   # a call that may have been a `since` one resets, to be safe
             start = max((i for i, p in enumerate(calls[:-1])
-                         if since.matches(p.name, p.args, paths)), default=-1)
+                         if since.match(p.name, p.args, paths) is not False), default=-1)
         if any(a.matches(p.name, p.args, paths) for p in calls[start + 1:-1]):
             return None
         tail = ""
@@ -484,7 +490,12 @@ def _require(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
 
     def check(calls: List[Any]) -> Optional[str]:
         c = calls[-1]
-        if c.name in target.tools and not target.matches(c.name, c.args, paths):
+        if not tool_matches(c.name, target.tools):
+            return None
+        hit = target.match(c.name, c.args, paths)
+        if hit is None:
+            return f"{c.name} must be called as {target.describe()}, which cannot be checked." + _MAYBE
+        if hit is False:
             return f"{c.name} must be called as {target.describe()}."
         return None
 
@@ -503,7 +514,7 @@ def _at_most(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
 
     def check(calls: List[Any]) -> Optional[str]:
         c = calls[-1]
-        if not target.matches(c.name, c.args, paths):
+        if target.match(c.name, c.args, paths) is False:
             return None
         n = sum(1 for p in calls[:-1] if target.matches(p.name, p.args, paths))
         if n >= times:

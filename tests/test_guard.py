@@ -109,9 +109,9 @@ def test_state_round_trips_through_json():
 
 
 def test_redirections_are_visible():
-    g = guard_for("rules: [{id: r, never: {tool: [echo, Write], where: {'*': '**/.env'}}}]")
-    assert run(g, "echo x > a.txt", "echo x >> .env", "echo x 2> .env") == [
-        "none", "deny", "none"]
+    g = guard_for("rules: [{id: r, never: {tool: [echo, cat, Write], where: {'*': '**/.env'}}}]")
+    assert run(g, "echo x > a.txt", "echo x >> .env", "echo x 2> .env", "echo x 2>&1",
+               "cat <<EOF > .env\nA=1\nEOF") == ["none", "deny", "deny", "none", "deny"]
 
 
 def test_large_inputs_are_trimmed_in_the_trace():
@@ -150,3 +150,48 @@ rules:
         assert [(r.id, r.scope) for r in rs.rules] == [("a", "project"), ("b", "session")]
         with pytest.raises(RuleFileError, match="scope must be one of"):
             loads("rules: [{id: a, never: rm, scope: forever}]")
+
+
+class TestWriteTargets:
+    """Commands whose targets used to be invisible to path rules."""
+
+    MIGRATIONS = "rules: [{id: r, never: {tool: '*', where: {'*': 'migrations/*'}}}]"
+
+    def test_unknown_targets_are_a_possible_match(self):
+        g = guard_for(self.MIGRATIONS)
+        for command in ("ls migrations | xargs rm", "find migrations -name x -exec rm {} +",
+                        "rm $SOMETHING", "find . -exec sed -i s/a/b/ {} ';'"):
+            v = g.decide("Bash", {"command": command})
+            assert v.action == "deny", command
+        v = g.decide("Bash", {"command": "ls | xargs rm"})
+        assert "only known at run time" in v.reason
+        assert g.decide("Bash", {"command": "rm build/x"}).action == "none"
+
+    def test_a_require_rule_cannot_be_satisfied_by_unknown_targets(self):
+        g = guard_for("rules: [{id: r, require: {tool: rm, where: {paths: 'build/**'}}}]")
+        assert run(g, "rm build/a", "ls | xargs rm", "F=build/b; rm $F") == ["none", "deny", "none"]
+
+    def test_resolved_variables_and_home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        g = guard_for("rules: [{id: r, never: {tool: rm, where: {paths: '**/secrets/*'}}}]")
+        assert run(g, "D=secrets; rm $D/key", "rm $HOME/secrets/key", "rm ~/secrets/key",
+                   "rm ~/notes") == ["deny", "deny", "deny", "none"]
+
+    def test_patch_targets_come_from_the_diff(self, tmp_path):
+        (tmp_path / "fix.diff").write_text(
+            "diff --git a/migrations/001.sql b/migrations/001.sql\n"
+            "--- a/migrations/001.sql\n+++ b/migrations/001.sql\n@@ -1 +1 @@\n-x\n+y\n")
+        (tmp_path / "ok.diff").write_text("--- a/src/x.py\n+++ b/src/x.py\n@@ -1 +1 @@\n-a\n+b\n")
+        g = guard_for(self.MIGRATIONS.replace("migrations/*", "**/migrations/*"), cwd=str(tmp_path))
+        assert run(g, "patch -p1 < fix.diff", "git apply fix.diff", "patch -p1 -i ok.diff",
+                   "git apply missing.diff") == ["deny", "deny", "none", "deny"]
+
+    def test_curl_remote_name_writes_a_file(self):
+        g = guard_for("rules: [{id: r, never: {tool: curl, where: {output: '**/bin/*'}}}]")
+        assert run(g, "curl -O https://x.dev/tool", "curl --output-dir bin -O https://x.dev/tool"
+                   ) == ["none", "deny"]
+
+    def test_tool_name_globs(self):
+        g = guard_for("rules: [{id: r, never: {tool: 'kubectl_*', with: {namespace: prod}}}]")
+        assert run(g, "kubectl -n prod get pods", "kubectl -n dev delete pod x",
+                   "kubectl -n prod delete pod x") == ["deny", "none", "deny"]

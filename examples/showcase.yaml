@@ -11,10 +11,7 @@ rules:
     why: Prod only gets what staging has already run.
 
   - id: plan-before-apply
-    before:
-      first: {tool: terraform, with: {argv: plan}}
-      then: {tool: terraform, with: {argv: apply}}
-      since: [Edit, Write]
+    before: {first: terraform_plan, then: terraform_apply, since: [Edit, Write]}
     why: Never apply infrastructure changes nobody has seen planned.
 
   - id: one-pr-per-session
@@ -44,7 +41,9 @@ rules:
     why: The task is limited to src/ and tests/.
 
   - id: no-prod-data
-    never: {tool: [psql, mysql, kubectl, redis_cli], where: {argv: "*prod*"}}
+    never:
+      - {tool: [psql, mysql, redis_cli], where: {argv: "*prod*"}}
+      - {tool: "kubectl_*", where: {"*": "*prod*"}}     # namespace, context, names...
     mode: stop
     why: Production data is off limits to the agent.
 
@@ -65,14 +64,3 @@ rules:
     mode: log
     why: Every sudo is worth a second look.
 
-tools:
-  gh:
-    subcommands:
-      pr:
-        subcommands:
-          create:
-            options:
-              - {flags: [-t, --title]}
-              - {flags: [-b, --body]}
-              - {flags: [-B, --base]}
-              - {flags: [-d, --draft], type: bool}
