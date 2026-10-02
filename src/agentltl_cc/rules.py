@@ -14,6 +14,8 @@ agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
         why: CI is slow; run the tests locally first.
         fix: Run pytest, then push.
         mode: warn
+    use: [no-force-push, {tests-before-push: {mode: warn}}]   # packaged rules, see library/
+    disable: [memory-first]     # switch off rules by id (from use:, ~/.claude, or built in)
     tools:                      # cli-to-tools specs for your own commands
       deploy: {options: [{flags: [--prod], type: bool}]}
 
@@ -127,6 +129,8 @@ class RuleSet:
     tool_specs: Dict[str, Any] = field(default_factory=dict)
     files: List[str] = field(default_factory=list)
     explicit_settings: bool = False
+    disabled: List[str] = field(default_factory=list)   # ids switched off by `disable:`
+    used: List[str] = field(default_factory=list)       # library packs named by `use:`
 
     def get(self, rule_id: str) -> Optional[Rule]:
         return next((r for r in self.rules if r.id == rule_id), None)
@@ -207,13 +211,18 @@ def load(files: List[str], paths: Optional[Paths] = None) -> RuleSet:
             else:
                 merged.rules.append(rule)
         merged.tool_specs.update(part.tool_specs)
+        merged.rules = [r for r in merged.rules if r.id not in part.disabled]
+        merged.disabled += part.disabled
+        merged.used += part.used
         if part.explicit_settings:
             merged.settings = part.settings
     if problems:
         raise RuleFileError(problems)
-    if merged.settings.memory_first and not merged.get(MEMORY_FIRST["id"]):
-        merged.rules.append(compile_rule(MEMORY_FIRST, merged.settings, paths or Paths(),
-                                         "built-in"))
+    if (merged.settings.memory_first and not merged.get(MEMORY_FIRST["id"])
+            and MEMORY_FIRST["id"] not in merged.disabled):
+        builtin = compile_rule(MEMORY_FIRST, merged.settings, paths or Paths(), "built-in")
+        builtin.source = "built-in"
+        merged.rules.append(builtin)
     return merged
 
 
@@ -249,7 +258,7 @@ def loads(text: str, paths: Optional[Paths] = None, source: str = "<rules>") -> 
         raise RuleFileError([f"{source}: expected a mapping with 'rules' (and optionally "
                              "'settings', 'tools')"])
     problems: List[str] = []
-    unknown = set(data) - {"version", "settings", "rules", "tools"}
+    unknown = set(data) - {"version", "settings", "rules", "tools", "use", "disable"}
     if unknown:
         problems.append(f"{source}: unknown top-level key(s) {sorted(unknown)}")
     settings = Settings()
@@ -271,6 +280,16 @@ def loads(text: str, paths: Optional[Paths] = None, source: str = "<rules>") -> 
     rules: List[Rule] = []
     seen: Dict[str, str] = {}
     paths = paths or Paths()
+    try:
+        packed, packed_tools = _use(data.get("use"), settings, paths)
+    except RuleError as exc:
+        problems.append(f"{source}: use: {exc}")
+        packed, packed_tools = [], {}
+    tools = {**packed_tools, **tools}
+    disabled = data.get("disable") or []
+    if not isinstance(disabled, list) or not all(isinstance(d, str) for d in disabled):
+        problems.append(f"{source}: disable: expected a list of rule ids")
+        disabled = []
     for i, raw in enumerate(raw_rules):
         where = f"{source}:{lines[i]}" if i < len(lines) else f"{source}: rules[{i}]"
         try:
@@ -282,10 +301,66 @@ def loads(text: str, paths: Optional[Paths] = None, source: str = "<rules>") -> 
             problems.append(f"{where}: duplicate id '{rule.id}' (first at {seen[rule.id]})")
             continue
         seen[rule.id] = where
+        rule.source = source
         rules.append(rule)
     if problems:
         raise RuleFileError(problems)
-    return RuleSet(rules, settings, tools, [source], "settings" in data)
+    own = {r.id for r in rules}       # a rule of the file replaces a library rule by id
+    rules = [r for r in packed if r.id not in own] + rules
+    rules = [r for r in rules if r.id not in disabled]
+    return RuleSet(rules, settings, tools, [source], "settings" in data, list(disabled),
+                   [_use_name(u) for u in data.get("use") or []])
+
+
+def _use_name(item: Any) -> str:
+    return item if isinstance(item, str) else next(iter(item))
+
+
+# ── the rule library ──────────────────────────────────────────────────────────
+
+LIBRARY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "library")
+
+
+def library() -> Dict[str, Dict[str, Any]]:
+    """The packaged rules, by name: each has ``summary``, ``tags``, ``rules``, ``tools``."""
+    out: Dict[str, Dict[str, Any]] = {}
+    if os.path.isdir(LIBRARY_DIR):
+        for name in sorted(os.listdir(LIBRARY_DIR)):
+            if name.endswith(".yaml"):
+                with open(os.path.join(LIBRARY_DIR, name), encoding="utf-8") as fh:
+                    pack = yaml.safe_load(fh) or {}
+                pack["path"] = os.path.join(LIBRARY_DIR, name)
+                out[name[:-5]] = pack
+    return out
+
+
+def _use(raw: Any, settings: Settings, paths: Paths) -> Tuple[List[Rule], Dict[str, Any]]:
+    """Compile ``use: [name, {name: {mode: warn}}]`` into the library's rules."""
+    if raw is None:
+        return [], {}
+    if not isinstance(raw, list):
+        raise RuleError("expected a list of library rule names (see `agentltl library`)")
+    packs = library()
+    rules: List[Rule] = []
+    tools: Dict[str, Any] = {}
+    for item in raw:
+        name, extra = (item, {}) if isinstance(item, str) else (
+            next(iter(item.items())) if isinstance(item, dict) and len(item) == 1 else (None, None))
+        if name is None or not isinstance(extra, dict) or set(extra) - {"mode", "scope"}:
+            raise RuleError(f"{item!r}: expected a name, or {{name: {{mode: ..., scope: ...}}}}")
+        if name not in packs:
+            import difflib
+            close = difflib.get_close_matches(name, packs, n=1)
+            hint = f" (did you mean '{close[0]}'?)" if close else ""
+            raise RuleError(f"no library rule '{name}'{hint}; `agentltl library` lists them")
+        pack = packs[name]
+        for i, rule in enumerate(pack.get("rules") or []):
+            compiled = compile_rule({**rule, **extra}, settings, paths, f"library:{name}[{i}]")
+            compiled.source = f"library:{name}"
+            rules.append(compiled)
+        tools.update(pack.get("tools") or {})
+    return rules, tools
 
 
 def _rule_lines(text: str) -> List[int]:
@@ -416,9 +491,9 @@ def _never(raw: Dict[str, Any], paths: Paths, where: str) -> Tuple[Any, ...]:
         c = calls[-1]
         hit = target.match(c.name, c.args, paths)
         if hit is True:
-            return f"{c.name} is not allowed: it matches {target.describe()}."
+            return f"{c.name} is not allowed: it matches {target.describe_hit(c.name, c.args, paths)}."
         if hit is None:
-            return f"{c.name} may match {target.describe()}." + _MAYBE
+            return f"{c.name} may match {target.describe_hit(c.name, c.args, paths)}." + _MAYBE
         return None
 
     return _predicate(check, f"never {target.describe()}"), target.tools, target

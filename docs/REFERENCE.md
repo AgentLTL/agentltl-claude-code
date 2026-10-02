@@ -228,6 +228,32 @@ Targets:
 
 `tools:` takes cli-to-tools specs for project commands, so rules can name their arguments.
 
+### The rule library
+
+[`library/`](../library) holds ready-made rules, one file each, with a `summary`, `tags`, and
+its `rules`. A rule file switches them on by name:
+
+```yaml
+use:
+  - no-force-push
+  - {tests-before-push: {mode: warn}}    # another mode (or scope) for this entry's rules
+disable: [subagents-on-sonnet-no-fork]   # switch single rules off by id
+rules:
+  - id: tests-before-push                # the same id as a packaged rule replaces it
+    before: {first: {tool: make, with: {argv: check}}, then: git_push, since: [Edit, Write]}
+```
+
+- **`disable:`** also switches off rules from `~/.claude/AGENTLTL.yaml` (for this project only)
+  and the built-in `memory-first`.
+- **`agentltl validate`** shows where each rule comes from: the project file, the user file,
+  `library:NAME` or `built-in`.
+- **Editing from the command line:** `agentltl use` / `unuse` / `disable` / `enable` edit these
+  lists without touching the rest of the file. Add `--user` for `~/.claude/AGENTLTL.yaml`.
+- **Choosing interactively:** `/agentltl-claude-code:agentltl-setup` lets you tick entries.
+
+To add an entry to the library, add a file to `library/` and a behaviour case to
+`tests/test_library.py`. Every entry must compile without lint warnings.
+
 ## CLI
 
 The plugin puts `agentltl` on Claude's PATH:
@@ -239,6 +265,9 @@ agentltl translate "git push -f origin main"
 agentltl tools 'git_*'
 agentltl trace                      what has been recorded, for this session and the project
 agentltl reset [--project]          forget the session's (or the project's) memory
+agentltl library [NAME]             the packaged rules (or one in full)
+agentltl use|unuse NAME... [--user] switch packaged rules on or off (use: --mode M)
+agentltl disable|enable ID... [--user]  switch single rules off, or back on
 ```
 
 `/agentltl-claude-code:agentltl` shows the guard's status.

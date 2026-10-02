@@ -8,6 +8,12 @@ agentltl_cc/cli.py – the ``agentltl`` command.
     agentltl trace [--session ID]        what the guard recorded: this session, and the project
     agentltl reset [--session ID]        forget this session's trace
     agentltl reset --project             forget the project's trace
+    agentltl library [NAME]              packaged rules you can switch on, or one in full
+    agentltl use NAME... [--mode M]      switch packaged rules on (unuse: off)
+    agentltl disable ID...               switch single rules off by id (enable: back on)
+
+``use``/``unuse``/``disable``/``enable`` edit the project's AGENTLTL.yaml (created if
+missing), or ``~/.claude/AGENTLTL.yaml`` with ``--user``.
 
 A ``check`` step is a shell command (``"git push -f"``) or another tool as
 ``'Edit {"file_path": ".env"}'``. Prefix a step with what you expect (``deny: git push``,
@@ -28,7 +34,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import store
 from .match import Paths
-from .rules import MODE_HELP, RuleFileError, RuleSet, load, rule_files
+from .rules import (
+    FILE_NAME,
+    MODE_HELP,
+    MODES,
+    RuleFileError,
+    RuleSet,
+    find_rule_file,
+    library,
+    load,
+    rule_files,
+    user_rule_file,
+)
 
 _EXPECT = re.compile(r"^(allow|deny|ask|stop|note)\s*:\s*", re.I)
 _TOOL_STEP = re.compile(r"^([A-Z][A-Za-z0-9_]*|mcp__[A-Za-z0-9_]+)\s+(\{.*\})\s*$", re.S)
@@ -65,6 +82,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         if name == "reset":
             p.add_argument("--project", action="store_true",
                            help="forget the project memory instead of the session's")
+
+    p = sub.add_parser("library", help="packaged rules you can switch on with `use`")
+    p.add_argument("name", nargs="?", help="show this one in full")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+
+    for name, what in (("use", "switch packaged rules on"), ("unuse", "switch packaged rules off"),
+                       ("disable", "switch rules off by id"), ("enable", "undo `disable`")):
+        p = sub.add_parser(name, help=what)
+        p.add_argument("names", nargs="+", metavar="ID" if "able" in name else "NAME")
+        p.add_argument("--user", action="store_true",
+                       help="edit ~/.claude/AGENTLTL.yaml (every project) instead of this project's")
+        if name == "use":
+            p.add_argument("--mode", choices=list(MODES), help="override the packs' modes")
 
     args = parser.parse_args(argv)
     try:
@@ -108,7 +138,7 @@ def _validate(args: argparse.Namespace) -> int:
     print(f"OK: {len(ruleset.rules)} rule(s) from {', '.join(ruleset.files)}")
     for r in ruleset.rules:
         memory = ", project memory" if r.scope == "project" else ""
-        print(f"  {r.id} [{r.mode}{memory}]: {r.summary}")
+        print(f"  {r.id} [{r.mode}{memory}] ({_origin(r.source)}): {r.summary}")
         if r.why:
             print(f"      why: {r.why}")
     _warn(ruleset)
@@ -161,6 +191,15 @@ def _check(args: argparse.Namespace) -> int:
             for line in row["reason"].splitlines():
                 print(f"      | {line}")
     return 1 if failed else 0
+
+
+def _origin(source: str) -> str:
+    """Where a rule comes from, in the words `disable` / `unuse` / editing need."""
+    if source.startswith("library:") or source == "built-in":
+        return source
+    if source == os.path.expanduser(os.path.join("~", ".claude", FILE_NAME)):
+        return f"user file {source}"
+    return f"file {source}" if source else "?"
 
 
 def _warn(ruleset: RuleSet) -> None:
@@ -260,8 +299,86 @@ def _reset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _library(args: argparse.Namespace) -> int:
+    packs = library()
+    try:
+        used = set(_ruleset([]).used)
+    except RuleFileError:
+        used = set()
+    if args.name:
+        if args.name not in packs:
+            print(f"No library rule {args.name!r}. `agentltl library` lists them.", file=sys.stderr)
+            return 1
+        with open(packs[args.name]["path"], encoding="utf-8") as fh:
+            print(fh.read(), end="")
+        return 0
+    if args.json:
+        print(json.dumps([{"name": n, "summary": p.get("summary", ""), "tags": p.get("tags", []),
+                           "in_use": n in used,
+                           "rules": [r.get("id") for r in p.get("rules") or []]}
+                          for n, p in packs.items()], indent=2))
+        return 0
+    width = max(map(len, packs), default=0)
+    for name, pack in packs.items():
+        mark = "on " if name in used else "   "
+        tags = ", ".join(pack.get("tags") or [])
+        print(f"  {mark} {name:<{width}}  {pack.get('summary', '')}  [{tags}]")
+    print("\nSwitch one on: agentltl use NAME   (--user for every project; --mode to override)")
+    return 0
+
+
+def _target_file(user: bool) -> str:
+    if user:
+        return user_rule_file() or os.path.expanduser(os.path.join("~", ".claude", FILE_NAME))
+    cwd, root = _here()
+    return find_rule_file(cwd, root) or os.path.join(root, FILE_NAME)
+
+
+def _edit_list(args: argparse.Namespace) -> int:
+    from .edit import read_list, write_list
+    from .rules import _use_name
+
+    path = _target_file(args.user)
+    key = "use" if args.cmd in ("use", "unuse") else "disable"
+    items = read_list(path, key)
+    if args.cmd == "use":
+        packs = library()
+        unknown = [n for n in args.names if n not in packs]
+        if unknown:
+            import difflib
+            for n in unknown:
+                close = difflib.get_close_matches(n, packs, n=1)
+                print(f"No library rule {n!r}" + (f" (did you mean {close[0]!r}?)" if close else ""),
+                      file=sys.stderr)
+            return 1
+        items = [i for i in items if _use_name(i) not in args.names]
+        items += [{n: {"mode": args.mode}} if args.mode else n for n in args.names]
+    elif args.cmd == "unuse":
+        items = [i for i in items if _use_name(i) not in args.names]
+    elif args.cmd == "disable":
+        items += [n for n in args.names if n not in items]
+    else:
+        missing = [n for n in args.names if n not in items]
+        if missing:
+            print(f"Not disabled in {path}: {', '.join(missing)}", file=sys.stderr)
+        items = [i for i in items if i not in args.names]
+    write_list(path, key, items)
+    try:
+        ruleset = load([path], Paths(*_here()))
+    except RuleFileError as exc:
+        print(f"{path} has problems now:", file=sys.stderr)
+        for problem in exc.problems:
+            print(f"  {problem}", file=sys.stderr)
+        return 2
+    shown = ", ".join(_use_name(i) for i in items) or "(none)"
+    n = sum(r.source != "built-in" for r in ruleset.rules)
+    print(f"{path}: {key} = {shown}; {n} rule(s) in this file now.")
+    return 0
+
+
 _COMMANDS = {"validate": _validate, "check": _check, "translate": _translate, "tools": _tools,
-             "trace": _trace, "reset": _reset}
+             "trace": _trace, "reset": _reset, "library": _library, "use": _edit_list,
+             "unuse": _edit_list, "disable": _edit_list, "enable": _edit_list}
 
 __all__ = ["main", "MODE_HELP"]
 

@@ -52,7 +52,32 @@ For automatic updates, open `/plugin` in Claude Code → **Marketplaces** → `a
 and run `/reload-plugins`.
 </details>
 
-## Adding rules
+## Picking ready-made rules
+
+The plugin comes with a library of tested rules. Run `/agentltl-claude-code:agentltl-setup`,
+tick the ones you want, and you're done:
+
+| Rule | What it does |
+|---|---|
+| `tests-before-push` | Run the tests after the last edit before pushing. |
+| `no-force-push` | Never force-push (`--force-with-lease` is fine). |
+| `no-push-to-main` | Never push to `main` or `master` directly. |
+| `ask-before-discarding-work` | Ask before `reset --hard`, `clean -f`, `branch -D`, `stash drop`. |
+| `no-claude-coauthor` | Claude never signs your commits. |
+| `protect-env-files` | Never read or touch `.env` files. |
+| `read-before-overwrite` | Read a file before overwriting it. |
+| `ask-before-recursive-delete` | Ask before `rm -r`. |
+| `ask-before-installing` | Ask before installing packages. |
+| `ask-before-infra-changes` | Ask before `terraform apply`, `kubectl delete`, ... |
+| `subagents-on-sonnet` | Subagents run on Sonnet, not on a bigger model. |
+
+They are switched on by name, so they improve with each plugin update:
+
+```yaml
+use: [tests-before-push, no-force-push, {subagents-on-sonnet: {mode: warn}}]
+```
+
+## Adding and removing rules
 
 Just ask Claude in plain words:
 
@@ -61,6 +86,8 @@ Just ask Claude in plain words:
 > Add a rule: don't touch the .env file, ever.
 >
 > Add a rule: ask me before installing any package.
+>
+> Remove the rule that stops me from pushing to main.
 
 Or use `/agentltl-claude-code:agentltl-rules <your rule>`. Claude writes the rule, tests it
 against examples it should and shouldn't catch, shows you the result, and saves it.

@@ -76,34 +76,26 @@ It takes about 10 to 30 seconds and ends with `agentltl-claude-code installed in
 on, run the plugin's command line as `"$plugin/bin/agentltl"` (re-set `plugin` the same way if
 your shell forgot it). Once the plugin is loaded, it is on the PATH as plain `agentltl`.
 
-## 6. Write the first rules, with the user
+## 6. Choose the first rules, with the user
 
-Ask the user what Claude should never do, or always do first, in this project. If they are
-unsure, offer a few common ones and let them pick:
+The plugin ships a library of tested rules the user can switch on by name. Start there:
+read `$plugin/skills/agentltl-setup/SKILL.md` and follow it. Until the plugin is loaded,
+`agentltl` is not on the PATH, so write `"$plugin/bin/agentltl"` wherever that file says
+`agentltl`. Run the commands from the project root.
 
-- run the tests before pushing, again after any edit;
-- never force-push, or never push to `main`;
-- never read or edit `.env` files;
-- ask before installing packages;
-- never edit files in a folder, such as `migrations/`, or only existing files there;
-- read a file before overwriting it.
-
-Then write their rules into `AGENTLTL.yaml` at the root of the current project (the git root,
-or the folder Claude Code was started in). Rules the user wants in every project go in
-`~/.claude/AGENTLTL.yaml` instead.
-
-The format, with examples, is in the plugin at
-`$plugin/skills/agentltl-rules/reference.md`. Read it, and follow these points:
+Then ask whether there is anything else Claude should never do, or always do first, in this
+project. For each answer, write a rule following `$plugin/skills/agentltl-rules/SKILL.md`. The
+rule format is in `$plugin/skills/agentltl-rules/reference.md`. In short:
 
 - **Tool names:** rules use the names commands translate to. Check with
   `"$plugin/bin/agentltl" translate "git push --force"`.
 - **Explain each rule:** give every rule a `why` (Claude sees it when blocked) and a `mode`
   matching how strict the user wants it: `block`, `warn`, `ask`, `retry`, `stop` or `log`.
 - **Test before saving:** check each rule against commands it should and should not stop:
-  `"$plugin/bin/agentltl" check --rules AGENTLTL.yaml "deny: git push --force" "allow: git push"`.
+  `"$plugin/bin/agentltl" check --add draft.yaml "deny: git push --force" "allow: git push"`.
   Fix it until every line ends in `ok` and there is no `WARNING`.
 
-Show the user the final file and the check results.
+Show the user the final `"$plugin/bin/agentltl" validate` output.
 
 ## 7. Finish
 
@@ -113,9 +105,10 @@ Tell the user:
    then on, in every project that has an `AGENTLTL.yaml`.
 2. **Try it:** ask Claude to do something a rule forbids, and watch it get refused with the
    rule's reason.
-3. **Add rules later in plain words:** `/agentltl-claude-code:agentltl-rules never touch the
-   lockfile`, or just ask Claude to add a rule.
-4. **See what it is doing:** `/agentltl-claude-code:agentltl` shows the rules in force and
+3. **Browse the library again:** `/agentltl-claude-code:agentltl-setup`.
+4. **Add or remove rules in plain words:** `/agentltl-claude-code:agentltl-rules never touch the
+   lockfile`, or "remove the rule about force-pushing", or just ask Claude.
+5. **See what it is doing:** `/agentltl-claude-code:agentltl` shows the rules in force and
    what the guard recently blocked.
 
 ## Troubleshooting

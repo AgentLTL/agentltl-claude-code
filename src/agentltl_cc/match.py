@@ -112,6 +112,9 @@ class Target:
                 maybe = True
         return None if maybe else True
 
+    def describe_hit(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> str:
+        return self.describe()
+
     def describe(self) -> str:
         tools = " or ".join(self.tools)
         parts = [f"{k}={v!r}" for k, v in self.with_.items()]
@@ -143,6 +146,11 @@ class AnyTarget:
 
     def describe(self) -> str:
         return " or ".join(t.describe() for t in self.targets)
+
+    def describe_hit(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> str:
+        """The alternatives a call matches (or may match), not every one."""
+        hits = [t for t in self.targets if t.match(name, args, paths) is not False]
+        return " or ".join(t.describe() for t in hits) or self.describe()
 
 
 def parse_target(spec: Any, where: str, *, with_: Any = None, where_: Any = None) -> Any:

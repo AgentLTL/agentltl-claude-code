@@ -21,4 +21,5 @@ Report on the AgentLTL for Claude Code. Requested: `$ARGUMENTS` (empty means `st
   2. Then run `agentltl reset`.
 - **check <steps>**: run `agentltl check <steps>` and explain each outcome.
 
-To add or change rules, use the `agentltl-rules` skill.
+To pick packaged rules, use the `agentltl-setup` skill. To add, change or remove rules, use
+the `agentltl-rules` skill.

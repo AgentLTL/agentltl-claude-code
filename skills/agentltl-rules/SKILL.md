@@ -1,6 +1,6 @@
 ---
 name: agentltl-rules
-description: Turn a natural-language rule ("never force-push", "run the tests before pushing", "don't touch .env") into AgentLTL rules in AGENTLTL.yaml, test them, and add them. Use when the user asks to add, change, explain or debug an AGENTLTL rule, or to translate a policy into AgentLTL / LTL constraints for this project. Also use it instead of saving to memory (CLAUDE.md, auto memory) whenever what you would remember says which tool calls or commands to make, avoid, or make first ("remember to never…", "from now on always … before …").
+description: Turn a natural-language rule ("never force-push", "run the tests before pushing", "don't touch .env") into AgentLTL rules in AGENTLTL.yaml, test them, and add them. Use when the user asks to add, change, remove, switch off, explain or debug an AGENTLTL rule ("remove the rule about force-pushing", "stop blocking rm -rf"), or to translate a policy into AgentLTL / LTL constraints for this project. Also use it instead of saving to memory (CLAUDE.md, auto memory) whenever what you would remember says which tool calls or commands to make, avoid, or make first ("remember to never…", "from now on always … before …").
 argument-hint: "<rule in plain words>"
 ---
 
@@ -17,10 +17,19 @@ Rule kinds, target syntax, modes and worked examples are in
 [reference.md](${CLAUDE_PLUGIN_ROOT}/skills/agentltl-rules/reference.md). Read it before you
 write a rule.
 
+If the user wants to remove, switch off or loosen a rule, go to
+[Removing or loosening a rule](#removing-or-loosening-a-rule).
+
 ## Steps
 
 1. **Read the current rules**: run `agentltl validate`. If there is no `AGENTLTL.yaml` yet,
    you will create one at the project root.
+
+   **Check the library first**: run `agentltl library`. If a packaged rule already does what
+   the user asked, offer it instead of writing a new one. It is tested, and it gets fixes
+   with plugin updates. Switch it on with `agentltl use NAME`, or with `--mode M` for another
+   strictness, then validate and stop here. If it almost fits, write a project rule with the
+   same id: it replaces the packaged one.
 
 2. **Find the real tool names and arguments.** Rules refer to the names the translator produces,
    not to the words in the command.
@@ -74,6 +83,38 @@ write a rule.
 
    Then add the rule to `AGENTLTL.yaml`, keeping the rest of the file and its comments intact.
    Run `agentltl validate` again.
+
+## Removing or loosening a rule
+
+The user often describes the rule rather than naming it: "remove the rule that says I can't
+push to main", "stop asking me before installing".
+
+1. **Find it**: run `agentltl validate`. Each rule is listed with its id, mode, what it
+   checks, its `why`, and in parentheses where it comes from. Match the user's words against
+   all of these.
+   - If several rules could be meant, ask which one, and show their ids and one-line summaries.
+   - If none matches, say so and list the rules.
+   - When a command was just refused, the refusal names the rule (`Rule 'x' blocked this
+     call`).
+2. **Confirm** before changing anything. Name the rule, quote its `why`, and say what will be
+   allowed from now on.
+3. **Change it** according to where it comes from:
+
+   | Comes from | To remove it | To loosen it |
+   |---|---|---|
+   | `file …/AGENTLTL.yaml` (the project's) | delete its entry under `rules:` with the Edit tool, keeping everything else | change its `mode` (e.g. `block` → `warn` or `ask`) |
+   | `library:NAME` | `agentltl unuse NAME` (switches off the whole entry). For one rule of an entry with several, `agentltl disable ID` | `agentltl use NAME --mode M` |
+   | `user file ~/.claude/AGENTLTL.yaml` | everywhere: delete it from that file. In this project only: `agentltl disable ID` | edit its mode in that file, or replace it here with a project rule of the same id |
+   | `built-in` (`memory-first`) | `agentltl disable memory-first` | a project rule with `id: memory-first` and `mode: log` |
+
+   `use`, `unuse`, `disable` and `enable` edit the project file. Add `--user` to edit
+   `~/.claude/AGENTLTL.yaml` instead. `agentltl enable ID` undoes a `disable`.
+4. **Check**: run `agentltl validate`. The rule must be gone, or show its new mode. If the user
+   gave an example command, run `agentltl check "allow: <command>"` to show it now passes.
+
+Never remove or loosen a rule on your own initiative, for example because it blocks what you
+are doing. Only the user decides that. When a rule is in your way, tell the user, and let them
+ask for the change.
 
 If you came here instead of saving a memory, don't also save the rule to memory: the rule
 is listed to Claude at every session start. Save to memory only the parts no rule can check.

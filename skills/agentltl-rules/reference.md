@@ -11,8 +11,13 @@ settings:                 # all optional
   scope: session          # default memory for rules: session | project (see Memory)
   memory_first: true      # refuse memory writes once, steering rules into this file
 
+use:                      # packaged rules from the plugin's library (`agentltl library`)
+  - no-force-push
+  - {tests-before-push: {mode: warn}}   # with another mode (or scope)
+disable: [memory-first]   # switch rules off by id: from use:, ~/.claude/AGENTLTL.yaml, or built in
+
 rules:
-  - id: short-kebab-id    # required, unique
+  - id: short-kebab-id    # required, unique; the same id as a packaged rule replaces it
     <kind>: ...           # exactly one kind, see below
     why: ...              # shown to Claude when it is blocked; say the reason, not the rule
     fix: ...              # optional: what to do instead
