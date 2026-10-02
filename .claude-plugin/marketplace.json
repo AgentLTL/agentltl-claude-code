@@ -1,0 +1,12 @@
+{
+  "name": "agentltl",
+  "owner": {"name": "lailanelkoussy"},
+  "description": "AgentLTL tools for Claude Code.",
+  "plugins": [
+    {
+      "name": "agentltl-claude-code",
+      "source": "./",
+      "description": "Project rules in AGENTLTL.yaml, enforced on every tool call (shell commands parsed into structured calls) with AgentLTL."
+    }
+  ]
+}

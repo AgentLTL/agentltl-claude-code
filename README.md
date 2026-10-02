@@ -8,26 +8,53 @@ subagent. A call that breaks an `AGENTLTL.yaml` rule is refused, and Claude is t
 
 ## Setup
 
-```bash
-git clone --recurse-submodules https://github.com/lailanelkoussy/agentltl-claude-code
-agentltl-claude-code/scripts/setup.sh      # venv with vendor/AgentLTL and vendor/cli-to-tools
+Install it as a Claude Code plugin; this repository is its own marketplace. In Claude Code:
+
+```
+/plugin marketplace add lailanelkoussy/agentltl-claude-code
+/plugin install agentltl-claude-code@agentltl
 ```
 
-Then either:
+Then turn on updates: `/plugin` → **Marketplaces** → `agentltl` → **Enable auto-update**. Or put
+this in `~/.claude/settings.json`, which also installs it on any machine that has the file:
 
-- **Load it as a plugin for one session:**
-  `claude --plugin-dir ./agentltl-claude-code`. You can also add it through a marketplace.
-  If the plugin starts without a venv, the first session start runs `setup.sh` into
-  `$CLAUDE_PLUGIN_DATA/venv`.
-- **Turn it on for every session:** point your user hooks at it in `~/.claude/settings.json`:
+```json
+"extraKnownMarketplaces": {
+  "agentltl": {"source": {"source": "github", "repo": "lailanelkoussy/agentltl-claude-code"},
+               "autoUpdate": true}
+},
+"enabledPlugins": {"agentltl-claude-code@agentltl": true}
+```
 
-  ```json
-  "hooks": {
-    "SessionStart": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run SessionStart", "timeout": 600}]}],
-    "PreToolUse":   [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PreToolUse"}]}],
-    "PostToolUse":  [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUse"}]}]
-  }
-  ```
+How it installs and updates:
+
+- **Python:** it needs Python 3.10+ and git on the machine. The first session start builds a
+  virtualenv in the plugin's data directory, which takes about 10 seconds. It installs AgentLTL
+  and cli-to-tools from GitHub at the commits pinned in `vendor.lock`.
+- **Updates:** the plugin has no fixed version, so every push to `main` is an update. With
+  auto-update on, Claude Code fetches it in the background a few minutes into a session and
+  tells you to run `/reload-plugins`; otherwise it applies at the next launch. Without
+  auto-update, run `/plugin update agentltl-claude-code@agentltl`.
+- **The virtualenv:** it survives updates. It is rebuilt only when `vendor.lock` changes.
+
+### From a clone (development)
+
+```bash
+git clone --recurse-submodules https://github.com/lailanelkoussy/agentltl-claude-code
+agentltl-claude-code/scripts/setup.sh --dev      # .venv with vendor/AgentLTL and vendor/cli-to-tools
+claude --plugin-dir ./agentltl-claude-code       # this session only
+```
+
+To have a clone run in every session, point your user hooks at it in `~/.claude/settings.json`
+instead of installing the plugin. Don't do both, or every call is recorded twice.
+
+```json
+"hooks": {
+  "SessionStart": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run SessionStart", "timeout": 600}]}],
+  "PreToolUse":   [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PreToolUse"}]}],
+  "PostToolUse":  [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUse"}]}]
+}
+```
 
 With no `AGENTLTL.yaml` in the project or in `~/.claude`, the hooks exit at once and do nothing.
 
@@ -243,3 +270,6 @@ scripts/setup.sh --dev
 .venv/bin/pytest
 .venv/bin/ruff check src tests
 ```
+
+When you move a submodule pin, update `vendor.lock` to the same commit; `tests/test_packaging.py`
+fails until they match, because marketplace installs (which have no submodules) install from it.

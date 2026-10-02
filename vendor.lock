@@ -1,0 +1,5 @@
+# Pinned dependencies: <package> <git url> <commit>. Must match the vendor/ submodules
+# (tests/test_packaging.py checks it). Used by scripts/setup.sh when vendor/ is empty,
+# which is the case for a plugin installed from a marketplace (no submodules there).
+agentltl https://github.com/lailanelkoussy/AgentLTL.git 232c3596953dac4ad7e8ee23043143a019745c11
+cli-to-tools https://github.com/lailanelkoussy/cli-to-tools.git b6a1a91286db87260559b6132ada2ecff7ab668c

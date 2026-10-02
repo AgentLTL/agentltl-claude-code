@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Hook launcher: finds the plugin's Python and runs the guard. $1 is the hook event.
-# On SessionStart it builds the virtualenv first if it is missing.
+# Hook launcher: finds the plugin's Python and runs the guard from this plugin directory.
+# $1 is the hook event. On SessionStart it builds the virtualenv first if it is missing, or
+# rebuilds it when vendor.lock changed (a plugin update that moved a dependency pin).
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 find_python() {
@@ -14,8 +15,12 @@ find_python() {
 }
 
 py="$(find_python)"
-if [[ -z "$py" && "$1" == "SessionStart" ]]; then
-    "$root/scripts/setup.sh" >&2 && py="$(find_python)"
+if [[ "$1" == "SessionStart" ]]; then
+    stale=1
+    [[ -n "$py" ]] && cmp -s "$root/vendor.lock" "$(dirname "$(dirname "$py")")/vendor.lock" && stale=0
+    if [[ -z "$py" || ( $stale == 1 && -z "${AGENTLTL_CC_PYTHON:-}" ) ]]; then
+        "$root/scripts/setup.sh" >&2 && py="$(find_python)"
+    fi
 fi
 if [[ -z "$py" ]]; then
     # Not installed. Stay out of the way unless rules exist, in which case say so loudly.
@@ -29,4 +34,4 @@ if [[ -z "$py" ]]; then
     fi
     exit 0
 fi
-exec "$py" -m agentltl_cc.hook
+PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}" exec "$py" -m agentltl_cc.hook

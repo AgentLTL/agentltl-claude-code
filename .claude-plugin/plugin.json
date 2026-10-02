@@ -1,10 +1,17 @@
 {
   "name": "agentltl-claude-code",
   "displayName": "AgentLTL for Claude Code",
-  "version": "0.1.0",
   "description": "Project rules in AGENTLTL.yaml, enforced on every tool call (shell commands parsed into structured calls) with AgentLTL.",
-  "author": {"name": "lailanelkoussy"},
+  "author": {
+    "name": "lailanelkoussy"
+  },
   "repository": "https://github.com/lailanelkoussy/agentltl-claude-code",
   "license": "MIT",
-  "keywords": ["agentltl", "ltl", "guardrails", "hooks", "bash"]
+  "keywords": [
+    "agentltl",
+    "ltl",
+    "guardrails",
+    "hooks",
+    "bash"
+  ]
 }
