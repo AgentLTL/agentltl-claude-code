@@ -1,0 +1,10 @@
+{
+  "name": "agentltl-guard",
+  "displayName": "AgentLTL guard",
+  "version": "0.1.0",
+  "description": "Project rules in AGENTLTL.yaml, enforced on every tool call (shell commands parsed into structured calls) with AgentLTL.",
+  "author": {"name": "lailanelkoussy"},
+  "repository": "https://github.com/lailanelkoussy/agentltl-guard",
+  "license": "MIT",
+  "keywords": ["agentltl", "ltl", "guardrails", "hooks", "bash"]
+}

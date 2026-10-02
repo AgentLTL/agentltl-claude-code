@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentltl-guard"
+version = "0.1.0"
+description = "AgentLTL rules in front of Claude Code's tool calls, shell commands included."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# agentltl and cli-to-tools come from vendor/ (git submodules); scripts/setup.sh installs them.
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+agentltl = "agentltl_guard.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

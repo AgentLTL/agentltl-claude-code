@@ -1,0 +1,14 @@
+{
+  "description": "AgentLTL guard: checks every tool call, shell commands included, against AGENTLTL.yaml",
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run SessionStart", "timeout": 600}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PreToolUse", "timeout": 30}]}
+    ],
+    "PostToolUse": [
+      {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PostToolUse", "timeout": 30}]}
+    ]
+  }
+}

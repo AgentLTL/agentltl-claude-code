@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Hook launcher: finds the plugin's Python and runs the guard. $1 is the hook event.
+# On SessionStart it builds the virtualenv first if it is missing.
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+find_python() {
+    local c
+    for c in "${AGENTLTL_GUARD_PYTHON:-}" \
+             "${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/venv/bin/python}" \
+             "$root/.venv/bin/python"; do
+        if [[ -n "$c" && -x "$c" ]]; then echo "$c"; return 0; fi
+    done
+    return 1
+}
+
+py="$(find_python)"
+if [[ -z "$py" && "$1" == "SessionStart" ]]; then
+    "$root/scripts/setup.sh" >&2 && py="$(find_python)"
+fi
+if [[ -z "$py" ]]; then
+    # Not installed. Stay out of the way unless rules exist, in which case say so loudly.
+    if [[ -f "${CLAUDE_PROJECT_DIR:-.}/AGENTLTL.yaml" || -f "$HOME/.claude/AGENTLTL.yaml" ]]; then
+        msg="AGENTLTL guard is not installed (run $root/scripts/setup.sh); rules are not enforced."
+        if [[ "$1" == "PreToolUse" ]]; then
+            printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}' "$msg"
+        else
+            printf '{"systemMessage":"%s"}' "$msg"
+        fi
+    fi
+    exit 0
+fi
+exec "$py" -m agentltl_guard.hook
