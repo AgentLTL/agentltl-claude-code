@@ -2,9 +2,11 @@
 
 import json
 
+import pytest
+
 from agentltl_cc.guard import Guard
 from agentltl_cc.match import Paths
-from agentltl_cc.rules import loads
+from agentltl_cc.rules import RuleFileError, loads
 
 from .conftest import guard_for, run
 
@@ -117,3 +119,34 @@ def test_large_inputs_are_trimmed_in_the_trace():
     g.record("Write", {"file_path": "a", "content": "x" * 10000}, "t", "y" * 10000)
     assert len(g.trace[-1]["arguments"]["content"]) < 2100
     assert len(g.trace[-1]["result"]) == 2000
+
+
+class TestMemoryScopes:
+    RULES = """
+rules:
+  - {id: tests-ever, before: [pytest, git_push], scope: project}
+  - {id: tests-now, before: [ruff, git_push]}
+"""
+
+    def test_project_memory_survives_a_new_session_and_session_memory_does_not(self):
+        rs = loads(self.RULES)
+
+        def session(project_state):
+            g = Guard(rs, Paths("/proj", "/proj"))
+            g.restore({}, json.loads(json.dumps(project_state)))
+            return g
+
+        first = session({})
+        assert run(first, "pytest", "ruff check", "git push") == ["none", "none", "none"]
+        second = session(first.dump_project())       # new session, same project
+        v = second.decide("Bash", {"command": "git push"})
+        assert (v.action, v.rule) == ("deny", "tests-now")  # pytest is remembered, ruff is not
+        assert [c["tool_name"] for c in second.project_trace] == ["pytest", "ruff", "git_push"]
+        assert second.trace == []
+
+    def test_scope_is_validated_and_defaults_from_settings(self):
+        rs = loads("settings: {scope: project}\nrules: [{id: a, never: rm}, "
+                   "{id: b, never: rm, scope: session}]")
+        assert [(r.id, r.scope) for r in rs.rules] == [("a", "project"), ("b", "session")]
+        with pytest.raises(RuleFileError, match="scope must be one of"):
+            loads("rules: [{id: a, never: rm, scope: forever}]")

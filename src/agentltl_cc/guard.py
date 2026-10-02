@@ -2,12 +2,16 @@
 agentltl_cc/guard.py – decide one Claude Code tool call against the rules.
 
     guard = Guard(ruleset, Paths(cwd, root))
-    guard.restore(state)                 # trace + enforcer counters of this session
+    guard.restore(session_state, project_state)   # traces + enforcer counters
     verdict = guard.decide("Bash", {"command": "git push"}, auto=False)
     verdict.action                       # "none" | "deny" | "ask" | "stop"
     ...after the call ran...
     guard.record("Bash", {"command": "pytest"}, "toolu_1", "3 passed")
-    state = guard.dump()
+    session_state, project_state = guard.dump(), guard.dump_project()
+
+Each rule reads one memory (its ``scope``): the session trace (calls made in this Claude Code
+session) or the project trace (every call made in this project, across sessions). Both
+record every call that runs; each scope has its own enforcer, and the stricter verdict wins.
 
 ``Bash`` calls are translated by cli-to-tools into the structured calls of the command line
 (``git commit -m x && git push`` → ``git_commit``, ``git_push``) and checked all or nothing.
@@ -27,7 +31,7 @@ from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
 from .match import Paths
-from .rules import MODES, Rule, RuleSet
+from .rules import MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
 AUTO_MODES = ("auto", "bypassPermissions", "dontAsk")
@@ -41,6 +45,7 @@ _ENGINE_FIELDS = (
 _MAX_TRACE = 5000
 _MAX_LOG = 200
 _MAX_STRING = 2000
+_RANK = {"none": 0, "ask": 1, "deny": 2, "stop": 3}
 
 _TAILS = {
     "block": "This rule cannot be overridden by you. Do something that satisfies it instead, "
@@ -160,34 +165,47 @@ class Guard:
         self.ruleset = ruleset
         self.paths = paths or Paths(os.getcwd())
         self.translator = translator_for(ruleset)
-        self.enforcer = CliConstraintEnforcer(
-            constraints=ruleset.constraints(),
-            constraint_severities=ruleset.severities(),
-            default_severity=ConstraintSeverity.PERSISTENT_BLOCK,
-            max_soft_attempts=ruleset.settings.retries,
-            soft_block_mode="cumulative",
-            translator=self.translator,
-            shell_tools=SHELL_TOOLS,
-        )
+        self.enforcers = {
+            scope: CliConstraintEnforcer(
+                constraints=ruleset.constraints(scope),
+                constraint_severities=ruleset.severities(scope),
+                default_severity=ConstraintSeverity.PERSISTENT_BLOCK,
+                max_soft_attempts=ruleset.settings.retries,
+                soft_block_mode="cumulative",
+                translator=self.translator,
+                shell_tools=SHELL_TOOLS,
+            )
+            for scope in SCOPES
+        }
 
     # ── state ─────────────────────────────────────────────────────────────────
 
-    def restore(self, state: Optional[Dict[str, Any]]) -> None:
-        state = state or {}
-        self.enforcer._completed_tool_calls = list(state.get("trace") or [])
-        for name, value in (state.get("engine") or {}).items():
-            if name in _ENGINE_FIELDS:
-                setattr(self.enforcer, name, value)
+    def restore(self, session: Optional[Dict[str, Any]],
+                project: Optional[Dict[str, Any]] = None) -> None:
+        for scope, state in (("session", session), ("project", project)):
+            enf, state = self.enforcers[scope], state or {}
+            enf._completed_tool_calls = list(state.get("trace") or [])
+            for name, value in (state.get("engine") or {}).items():
+                if name in _ENGINE_FIELDS:
+                    setattr(enf, name, value)
 
-    def dump(self) -> Dict[str, Any]:
-        engine = {name: getattr(self.enforcer, name, None) for name in _ENGINE_FIELDS}
+    def dump(self, scope: str = "session") -> Dict[str, Any]:
+        enf = self.enforcers[scope]
+        engine = {name: getattr(enf, name, None) for name in _ENGINE_FIELDS}
         for name in ("_constraint_violations", "_soft_blocked_calls", "_block_and_warn_overrides"):
             engine[name] = list(engine[name] or [])[-_MAX_LOG:]
-        return {"trace": self.enforcer._completed_tool_calls[-_MAX_TRACE:], "engine": engine}
+        return {"trace": enf._completed_tool_calls[-_MAX_TRACE:], "engine": engine}
+
+    def dump_project(self) -> Dict[str, Any]:
+        return self.dump("project")
 
     @property
     def trace(self) -> List[Dict[str, Any]]:
-        return self.enforcer._completed_tool_calls
+        return self.enforcers["session"]._completed_tool_calls
+
+    @property
+    def project_trace(self) -> List[Dict[str, Any]]:
+        return self.enforcers["project"]._completed_tool_calls
 
     # ── deciding ──────────────────────────────────────────────────────────────
 
@@ -202,7 +220,6 @@ class Guard:
         return [ToolCall(tool_name, dict(tool_input or {}), "", {})]
 
     def decide(self, tool_name: str, tool_input: Dict[str, Any], *, auto: bool = False) -> Verdict:
-        from agentltl import ConstraintViolationError
 
         if not self.ruleset.rules:
             return Verdict()
@@ -212,8 +229,18 @@ class Guard:
         except TranslationError as exc:
             return self._unparseable(tool_input.get("command", ""), exc, auto)
         shown = [{"tool_name": c.name, "arguments": c.args} for c in calls]
+        verdicts = [self._decide_in(scope, tool_name, tool_input, calls, shown)
+                    for scope in SCOPES if self.ruleset.scoped(scope)]
+        verdict = max(verdicts, key=lambda v: _RANK[v.action])
+        notes = "\n".join(v.context for v in verdicts if v.context)
+        verdict.context = notes
+        return verdict
 
-        enf = self.enforcer
+    def _decide_in(self, scope: str, tool_name: str, tool_input: Dict[str, Any],
+                   calls: List[ToolCall], shown: List[Dict[str, Any]]) -> Verdict:
+        from agentltl import ConstraintViolationError
+
+        enf = self.enforcers[scope]
         enf.begin_generation()
         logged = len(enf._constraint_violations)
         blocked = len(enf._soft_blocked_calls)
@@ -256,16 +283,17 @@ class Guard:
 
     def record(self, tool_name: str, tool_input: Dict[str, Any], tool_id: str,
                result: Any) -> None:
-        """Add a call that has run to the session trace."""
+        """Add a call that has run to the session and project traces."""
         tool_input = _trim(dict(tool_input or {}))
         text = result if isinstance(result, str) else ("" if result is None else str(result))
         text = text[:_MAX_STRING]
-        try:
-            self.enforcer.record_completed(tool_name, tool_input, tool_id, text)
-        except TranslationError:
-            # an unparseable command the user let through: kept, under the Claude Code name
-            self.enforcer._completed_tool_calls.append(
-                {"tool_name": tool_name, "arguments": tool_input, "id": tool_id, "result": text})
+        for enf in self.enforcers.values():
+            try:
+                enf.record_completed(tool_name, tool_input, tool_id, text)
+            except TranslationError:
+                # an unparseable command the user let through: kept under the Claude Code name
+                enf._completed_tool_calls.append({"tool_name": tool_name, "arguments": tool_input,
+                                                  "id": tool_id, "result": text})
 
     # ── messages ──────────────────────────────────────────────────────────────
 

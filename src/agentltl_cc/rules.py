@@ -6,6 +6,7 @@ agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
       retries: 3                # attempts allowed by mode: retry before asking you
       unparseable: {interactive: ask, auto: note}
       announce: true            # list the rules to Claude at session start and after compaction
+      scope: session            # default memory for rules: session | project
     rules:
       - id: tests-before-push
         before: {first: pytest, then: git_push, since: [Edit, Write]}
@@ -26,6 +27,10 @@ Rule kinds (exactly one per rule; targets are described in :mod:`agentltl_cc.mat
     formula: {type, args}     structured AgentLTL formula
 
 ``never``, ``require`` and ``at_most`` also take ``with:`` / ``where:`` at rule level.
+
+``scope`` says which memory a rule reads: ``session`` (the calls made in this Claude Code
+session; starts empty with each new session, kept across compaction and resume) or
+``project`` (every call made in this project, across sessions; never reset automatically).
 
 Rules from ``~/.claude/AGENTLTL.yaml`` apply everywhere; the project file adds to them and
 replaces a user rule with the same id.
@@ -65,8 +70,9 @@ MODE_HELP: Dict[str, str] = {
 # breaks: had one been broken, it would have decided the call instead.
 STRENGTH = ("stop", "block", "ask", "retry", "warn", "log")
 UNPARSEABLE = ("ask", "note", "allow", "deny")
+SCOPES = ("session", "project")
 KINDS = ("never", "before", "require", "at_most", "ltl", "formula")
-_RULE_KEYS = {"id", "why", "fix", "mode", "with", "where", *KINDS}
+_RULE_KEYS = {"id", "why", "fix", "mode", "scope", "with", "where", *KINDS}
 
 
 @dataclass
@@ -76,6 +82,7 @@ class Settings:
     unparseable_interactive: str = "ask"
     unparseable_auto: str = "note"
     announce: bool = True
+    scope: str = "session"
 
 
 @dataclass
@@ -89,6 +96,7 @@ class Rule:
     tools: Tuple[str, ...] = ()
     source: str = ""
     targets: Tuple[Any, ...] = ()
+    scope: str = "session"
 
     @property
     def summary(self) -> str:
@@ -112,14 +120,17 @@ class RuleSet:
     def get(self, rule_id: str) -> Optional[Rule]:
         return next((r for r in self.rules if r.id == rule_id), None)
 
-    def constraints(self) -> List[Any]:
-        """Constraints, strongest mode first (see STRENGTH)."""
-        ordered = sorted(self.rules, key=lambda r: STRENGTH.index(r.mode))
+    def scoped(self, scope: Optional[str]) -> List[Rule]:
+        return [r for r in self.rules if scope is None or r.scope == scope]
+
+    def constraints(self, scope: Optional[str] = None) -> List[Any]:
+        """Constraints of one scope (all when None), strongest mode first (see STRENGTH)."""
+        ordered = sorted(self.scoped(scope), key=lambda r: STRENGTH.index(r.mode))
         return [r.constraint() for r in ordered]
 
-    def severities(self) -> Dict[str, Any]:
+    def severities(self, scope: Optional[str] = None) -> Dict[str, Any]:
         from agentltl import ConstraintSeverity
-        return {r.id: ConstraintSeverity[MODES[r.mode]] for r in self.rules}
+        return {r.id: ConstraintSeverity[MODES[r.mode]] for r in self.scoped(scope)}
 
 
 class RuleFileError(Exception):
@@ -259,7 +270,7 @@ def _settings(raw: Any) -> Settings:
         return Settings()
     if not isinstance(raw, dict):
         raise RuleError("expected a mapping")
-    unknown = set(raw) - {"mode", "retries", "unparseable", "announce"}
+    unknown = set(raw) - {"mode", "retries", "unparseable", "announce", "scope"}
     if unknown:
         raise RuleError(f"unknown key(s) {sorted(unknown)}")
     s = Settings()
@@ -269,6 +280,8 @@ def _settings(raw: Any) -> Settings:
         if not isinstance(raw["retries"], int) or raw["retries"] < 1:
             raise RuleError("retries must be a positive integer")
         s.retries = raw["retries"]
+    if "scope" in raw:
+        s.scope = _scope(raw["scope"])
     if "announce" in raw:
         if not isinstance(raw["announce"], bool):
             raise RuleError("announce must be true or false")
@@ -286,6 +299,12 @@ def _settings(raw: Any) -> Settings:
         s.unparseable_interactive = unp.get("interactive", s.unparseable_interactive)
         s.unparseable_auto = unp.get("auto", s.unparseable_auto)
     return s
+
+
+def _scope(value: Any) -> str:
+    if value not in SCOPES:
+        raise RuleError(f"scope must be one of {', '.join(SCOPES)}, got {value!r}")
+    return value
 
 
 def _mode(value: Any) -> str:
@@ -326,12 +345,13 @@ def compile_rule(raw: Any, settings: Settings, paths: Paths, where: str = "rule"
         raise RuleError(f"rule '{rule_id}': 'with'/'where' at rule level only apply to "
                         "never, require and at_most; put them on a target instead")
     mode = _mode(raw.get("mode", settings.mode))
+    scope = _scope(raw.get("scope", settings.scope))
     why = str(raw.get("why") or "").strip()
     fix = str(raw.get("fix") or "").strip()
     formula, tools, *targets = _BUILDERS[kind](raw, paths, f"{rule_id}.{kind}")
     if kind in ("ltl", "formula"):
         _require_runtime_safe(formula, rule_id)
-    return Rule(rule_id, kind, why, fix, mode, formula, tools, where, tuple(targets))
+    return Rule(rule_id, kind, why, fix, mode, formula, tools, where, tuple(targets), scope)
 
 
 def _predicate(fn: Callable[[List[Any]], Optional[str]], label: str) -> Any:

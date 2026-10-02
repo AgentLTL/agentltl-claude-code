@@ -116,3 +116,15 @@ def test_launcher(project, tmp_path):
                           input=json.dumps(payload), capture_output=True, text=True, env=env)
     assert done.returncode == 0
     assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_project_memory_spans_sessions(project):
+    (project / "AGENTLTL.yaml").write_text(
+        "rules: [{id: t, before: [pytest, git_push], scope: project}]")
+    event(project, "PostToolUse", *bash("pytest"))                     # session s1
+    later = {"session_id": "s2", "cwd": str(project), "permission_mode": "default",
+             "hook_event_name": "PreToolUse", "tool_name": "Bash",
+             "tool_input": {"command": "git push"}, "tool_use_id": "t"}
+    assert hook.run(later) is None                                     # session s2
+    store.reset_project(str(project))
+    assert hook.run(later)["hookSpecificOutput"]["permissionDecision"] == "deny"

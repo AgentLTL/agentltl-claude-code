@@ -5,8 +5,9 @@ agentltl_cc/cli.py – the ``agentltl`` command.
     agentltl check STEP...               replay steps through the rules in a fresh session
     agentltl translate COMMAND           the structured calls a shell command stands for
     agentltl tools [PATTERN]             tool names and arguments rules can refer to
-    agentltl trace [--session ID]        what the guard recorded and decided this session
+    agentltl trace [--session ID]        what the guard recorded: this session, and the project
     agentltl reset [--session ID]        forget this session's trace
+    agentltl reset --project             forget the project's trace
 
 A ``check`` step is a shell command (``"git push -f"``) or another tool as
 ``'Edit {"file_path": ".env"}'``. Prefix a step with what you expect (``deny: git push``,
@@ -59,8 +60,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     for name in ("trace", "reset"):
         p = sub.add_parser(name, help="show" if name == "trace" else "forget"
-                           " what the guard recorded for a session")
+                           " what the guard recorded")
         p.add_argument("--session", help="session id (default: the latest one here)")
+        if name == "reset":
+            p.add_argument("--project", action="store_true",
+                           help="forget the project memory instead of the session's")
 
     args = parser.parse_args(argv)
     try:
@@ -103,12 +107,14 @@ def _validate(args: argparse.Namespace) -> int:
         return 0
     print(f"OK: {len(ruleset.rules)} rule(s) from {', '.join(ruleset.files)}")
     for r in ruleset.rules:
-        print(f"  {r.id} [{r.mode}]: {r.summary}")
+        memory = ", project memory" if r.scope == "project" else ""
+        print(f"  {r.id} [{r.mode}{memory}]: {r.summary}")
         if r.why:
             print(f"      why: {r.why}")
     _warn(ruleset)
     s = ruleset.settings
-    print(f"settings: default mode {s.mode}, retries {s.retries}, unparseable commands: "
+    print(f"settings: default mode {s.mode}, default memory {s.scope}, retries {s.retries}, "
+          "unparseable commands: "
           f"{s.unparseable_interactive} (interactive) / {s.unparseable_auto} (auto mode)")
     return 0
 
@@ -119,7 +125,7 @@ def _check(args: argparse.Namespace) -> int:
     cwd, root = _here()
     ruleset = _ruleset(args.rules, args.add)
     guard = Guard(ruleset, Paths(cwd, root))
-    guard.restore({})
+    guard.restore({}, {})
     if not args.json:
         _warn(ruleset)
     rows, failed = [], False
@@ -217,9 +223,13 @@ def _session(args: argparse.Namespace) -> Optional[str]:
 
 
 def _trace(args: argparse.Namespace) -> int:
-    sid = _session(args)
+    root = _here()[1]
+    project = store.read_project(root).get("trace") or []
+    print(f"project {root}: {len(project)} recorded call(s), across sessions")
+    sid = args.session or store.latest_session(root)
     if sid is None:
-        return 1
+        print("No recorded session for this project.")
+        return 0
     state = store.read(sid)
     trace = state.get("trace") or []
     print(f"session {sid}: {len(trace)} recorded call(s)")
@@ -237,6 +247,11 @@ def _trace(args: argparse.Namespace) -> int:
 
 
 def _reset(args: argparse.Namespace) -> int:
+    if args.project:
+        root = _here()[1]
+        store.reset_project(root)
+        print(f"Project {root}: trace and counters cleared.")
+        return 0
     sid = _session(args)
     if sid is None:
         return 1

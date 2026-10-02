@@ -8,6 +8,7 @@ settings:                 # all optional
     interactive: ask      # ask | note | allow | deny, in normal permission modes
     auto: note            # in auto / bypass mode: note = let through, tell Claude it was unchecked
   announce: true          # list the rules to Claude at session start and after compaction
+  scope: session          # default memory for rules: session | project (see Memory)
 
 rules:
   - id: short-kebab-id    # required, unique
@@ -15,6 +16,7 @@ rules:
     why: ...              # shown to Claude when it is blocked; say the reason, not the rule
     fix: ...              # optional: what to do instead
     mode: block           # optional, see Modes
+    scope: session        # optional, see Memory
 
 tools:                    # optional cli-to-tools specs for project commands (see below)
 ```
@@ -56,22 +58,36 @@ redirections (`> file`, `>> file`) appear as `redirect_to`.
 | Kind | Meaning |
 |---|---|
 | `never: T` | No call matching T. `with:`/`where:` may sit at rule level. |
-| `before: [A, B]` | A call matching B needs an earlier call matching A in this session. |
+| `before: [A, B]` | A call matching B needs an earlier call matching A (in the rule's memory). |
 | `before: {first: A, then: B, since: S}` | The A must come after the last call matching S. This is "run tests after your last edit". |
 | `require: T` | When one of T's tools is called, its arguments must match T's `with`/`where`. |
-| `at_most: {call: T, times: n}` | At most n calls matching T in this session. |
-| `ltl: '<formula>'` | Raw AgentLTL. `called("x")`, `before("a","b")`, `G`, `X`, `U`, `!`, `&`, `\|`, `->` |
+| `at_most: {call: T, times: n}` | At most n calls matching T (in the rule's memory). |
+| `ltl: '<formula>'` | Raw AgentLTL. `now("x")`, `called("x")`, `before("a","b")`, `G`, `X`, `U`, `!`, `&`, `\|`, `->` |
 | `formula: {type: ..., args: ...}` | Structured AgentLTL, e.g. `{type: Before, args: {a: x, b: y}}` |
 
 How rules are evaluated:
 
 - The kinds other than `ltl` and `formula` judge **only the call being made**. A rule broken
   earlier, for example by an override, never blocks unrelated later calls.
-- `ltl` and `formula` use AgentLTL's own semantics over the whole session trace.
+- `ltl` and `formula` use AgentLTL's own semantics over the whole trace of the rule's memory.
+  `now("x")` means "the call at this step is x"; `called("x")` means "x appears anywhere in
+  the trace". Under `G` and `X` you almost always want `now`:
+  `G(now("deploy") -> X(G(!now("deploy"))))` is "deploy at most once".
 - Formulas that AgentLTL classifies as unsafe to enforce (liveness properties) are rejected,
   because the guard acts on each call as it is made and cannot wait for the session to end.
   That covers `F(called("pytest"))`, a bare `called("x")`, and a bare `before("a", "b")`.
-  Guard the formula with `G(called(...) -> ...)`, or use a rule kind (`before: [a, b]`).
+  Guard the formula with `G(now(...) -> ...)`, or use a rule kind (`before: [a, b]`).
+
+## Memory
+
+| `scope` | Remembers | Resets |
+|---|---|---|
+| `session` (default) | Calls made in this Claude Code session | With each new session; compaction and resume keep it |
+| `project` | Every call made in this project, across sessions | Never on its own; `agentltl reset --project` |
+
+Pick `session` for "since you started working" rules (tests before pushing, one migration per
+task). Pick `project` for facts that stay true (a one-time setup step, a release cap). When the
+user says "ever", "already", "once per project" or "in any session", that is `project`.
 
 ## Modes
 
@@ -159,10 +175,10 @@ tools:   # teach the translator a project command, so rules can name its argumen
   with every command they might run, listed once.
 - **No visibility into scripts or programs.** The guard does not see inside `bash script.sh`,
   `make target`, `npm run x`, or `python -c "..."`. It sees only the command. Name those
-  commands in the rule too, for example `make_test` in the `first:` list.
-- **Path resolution is approximate.** Relative paths are resolved against the session's working
-  directory, not against a `cd` earlier in the same command line.
+  commands in the rule too, for example `{tool: make, with: {argv: test}}` in the `first:` list.
 - **Only calls that ran count as done.** A call is recorded once it has run, so a denied call,
   or one you refused, never counts toward `before`.
-- **Memory is per session.** A new session starts an empty trace. A compaction or a resume
-  keeps it.
+- **Session memory starts empty in each new session.** Use `scope: project` when the rule
+  should remember earlier sessions.
+- **`cd` inside a command line is not followed** (to do), and **`exists` re-judges earlier calls
+  against the disk as it is now** (to do). Mention them when a rule depends on either.

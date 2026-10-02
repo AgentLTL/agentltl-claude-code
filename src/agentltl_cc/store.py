@@ -1,8 +1,9 @@
 """
 agentltl_cc/store.py – per-session state on disk.
 
-Each hook call is a fresh process, so the session's trace and enforcer counters live in
-``<state dir>/<session id>.json``. Claude Code may run tool calls in parallel, so every
+Each hook call is a fresh process, so traces and enforcer counters live on disk: the
+session memory in ``<state dir>/<session id>.json``, the project memory (every call made in
+a project, across sessions) in ``<state dir>/../projects/<hash of the project dir>.json``. Claude Code may run tool calls in parallel, so every
 read-modify-write holds an exclusive lock on ``<file>.lock``.
 
 State dir: ``$AGENTLTL_CC_STATE``, else ``sessions/`` next to the plugin's virtualenv
@@ -13,6 +14,7 @@ State dir: ``$AGENTLTL_CC_STATE``, else ``sessions/`` next to the plugin's virtu
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -35,27 +37,53 @@ def session_path(session_id: str) -> str:
     return os.path.join(state_dir(), f"{safe}.json")
 
 
-def read(session_id: str) -> Dict[str, Any]:
+def project_path(project_dir: str) -> str:
+    key = hashlib.sha1(os.path.abspath(project_dir).encode()).hexdigest()[:16]
+    return os.path.join(os.path.dirname(state_dir()), "projects", f"{key}.json")
+
+
+def _read(path: str) -> Dict[str, Any]:
     try:
-        with open(session_path(session_id), encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return {}
 
 
+def read(session_id: str) -> Dict[str, Any]:
+    return _read(session_path(session_id))
+
+
+def read_project(project_dir: str) -> Dict[str, Any]:
+    return _read(project_path(project_dir))
+
+
 @contextmanager
-def locked(session_id: str) -> Iterator[Dict[str, Any]]:
-    """Yield the session state for update; whatever it holds on exit is written back."""
-    path = session_path(session_id)
+def _locked(path: str) -> Iterator[Dict[str, Any]]:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path + ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        state = read(session_id)
+        state = _read(path)
         yield state
         fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(state, fh, default=str)
         os.replace(tmp, path)
+
+
+@contextmanager
+def locked(session_id: str) -> Iterator[Dict[str, Any]]:
+    """Yield the session state for update; whatever it holds on exit is written back."""
+    with _locked(session_path(session_id)) as state:
+        yield state
+
+
+@contextmanager
+def locked_project(project_dir: str) -> Iterator[Dict[str, Any]]:
+    """Like :func:`locked`, for the project memory. Take it after the session lock."""
+    with _locked(project_path(project_dir)) as state:
+        state["project_dir"] = os.path.abspath(project_dir)
+        yield state
 
 
 def latest_session(cwd: Optional[str] = None) -> Optional[str]:
@@ -81,4 +109,10 @@ def reset(session_id: str) -> None:
         state.update(keep)
 
 
-__all__: List[str] = ["state_dir", "session_path", "read", "locked", "latest_session", "reset"]
+def reset_project(project_dir: str) -> None:
+    with locked_project(project_dir) as state:
+        state.clear()
+
+
+__all__: List[str] = ["state_dir", "session_path", "project_path", "read", "read_project",
+                       "locked", "locked_project", "latest_session", "reset", "reset_project"]

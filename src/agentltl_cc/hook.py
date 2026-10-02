@@ -4,7 +4,7 @@ event JSON on stdin and prints the hook's JSON answer.
 
     SessionStart   remind Claude of the rules (also after a compaction); report file errors
     PreToolUse     deny / ask / stop when a call breaks a rule, else stay silent
-    PostToolUse    add the call that ran to the session trace
+    PostToolUse    add the call that ran to the session and project traces
 
 Without an AGENTLTL.yaml (project or ``~/.claude``) it exits at once. It never approves a
 call: silence leaves the decision to Claude Code's permission flow. Any internal error
@@ -68,8 +68,8 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
     sid = payload.get("session_id") or "default"
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     guard = Guard(ruleset, Paths(cwd, project))
-    with store.locked(sid) as state:
-        guard.restore(state)
+    with store.locked(sid) as state, store.locked_project(project) as project_state:
+        guard.restore(state, project_state)
         if event == "PostToolUse":
             guard.record(tool, tool_input, payload.get("tool_use_id", ""),
                          payload.get("tool_response"))
@@ -78,6 +78,7 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
             verdict = guard.decide(tool, tool_input, auto=is_auto(payload.get("permission_mode")))
         state.update(guard.dump())
         state["project_dir"] = project
+        project_state.update(guard.dump_project())
         if verdict is not None and verdict.action != "none":
             state.setdefault("decisions", []).append(
                 {"tool": tool, "input": tool_input, "action": verdict.action, "rule": verdict.rule})
@@ -112,7 +113,8 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
     ]
     for r in ruleset.rules:
         why = f" — {r.why}" if r.why else ""
-        lines.append(f"- {r.id} [{r.mode}]: {r.summary}{why}")
+        memory = ", whole project" if r.scope == "project" else ""
+        lines.append(f"- {r.id} [{r.mode}{memory}]: {r.summary}{why}")
     return {
         "systemMessage": f"AgentLTL: {n} rule(s) from {where}",
         "hookSpecificOutput": {"hookEventName": "SessionStart",
