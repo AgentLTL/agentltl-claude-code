@@ -181,8 +181,8 @@ def _curl_output(call: ToolCall) -> None:
 
 def translator_for(ruleset: RuleSet) -> GuardTranslator:
     registry = SpecRegistry()
-    if ruleset.tool_specs:
-        registry.load_dict(ruleset.tool_specs)
+    if ruleset.tool_specs:   # extends the bundled spec of the same command unless `extend: false`
+        registry.load_dict(ruleset.tool_specs, extend=True)
     return GuardTranslator(registry)
 
 

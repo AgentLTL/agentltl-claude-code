@@ -335,5 +335,8 @@ scripts/setup.sh --dev
 ```
 
 When you move a submodule pin, update `vendor.lock` to the same commit; `tests/test_packaging.py`
-fails until they match. The hooks rebuild an installed plugin's virtualenv when `vendor.lock`
-changes, so a moved pin that skips `vendor.lock` never reaches existing installs.
+fails until they match. An installed plugin keeps one virtualenv per `vendor.lock`
+(`venv-<checksum>` in its data directory, see `scripts/env.sh`). The first hook after an
+update that moved a pin builds the new one. A session still on the old version keeps its
+own, and environments unused for 14 days are removed. A moved pin that skips `vendor.lock`
+never reaches existing installs.

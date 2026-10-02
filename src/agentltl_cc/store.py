@@ -7,7 +7,7 @@ a project, across sessions) in ``<state dir>/../projects/<hash of the project di
 read-modify-write holds an exclusive lock on ``<file>.lock``.
 
 State dir: ``$AGENTLTL_CC_STATE``, else ``sessions/`` next to the plugin's virtualenv
-(``$CLAUDE_PLUGIN_DATA/venv`` → ``$CLAUDE_PLUGIN_DATA/sessions``, so the hook and the
+(``$CLAUDE_PLUGIN_DATA/venv-<pins>`` → ``$CLAUDE_PLUGIN_DATA/sessions``, so the hook and the
 ``agentltl`` CLI agree without sharing an environment), else ``~/.cache/agentltl-claude-code/sessions``.
 """
 
@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterator, List, Optional
 def state_dir() -> str:
     if os.environ.get("AGENTLTL_CC_STATE"):
         return os.environ["AGENTLTL_CC_STATE"]
-    if os.path.basename(sys.prefix) == "venv":
+    if re.fullmatch(r"venv(-\d+)?", os.path.basename(sys.prefix)):
         return os.path.join(os.path.dirname(sys.prefix), "sessions")
     return os.path.join(os.path.expanduser("~"), ".cache", "agentltl-claude-code", "sessions")
 

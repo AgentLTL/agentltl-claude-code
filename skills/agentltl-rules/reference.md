@@ -209,7 +209,35 @@ tools:   # teach the translator a project command, so rules can name its argumen
         options:
           - {flags: [-m, --message]}
           - {flags: [--autogenerate], type: bool}
+  helm:
+    options:
+      - {flags: [-n, --namespace], global: true}   # accepted before or after the subcommand
+    subcommands:
+      upgrade: {positionals: [{name: release}, {name: chart}]}
+  kubectl:   # already bundled: this ADDS rollout's arguments, the rest of kubectl stays
+    subcommands:
+      rollout: {positionals: [{name: action}, {name: resource}]}
 ```
+
+### When a command needs a spec
+
+The specs under `tools:` are used everywhere the rules are: on Claude's Bash calls, and by
+`agentltl translate`, `check` and `tools`. Add or extend one when `agentltl translate` shows
+that the argument a rule needs is not named:
+
+- **The command has no spec:** the result is `{"argv": [...]}`. The lint warns "has no spec".
+- **The flag is unknown:** it lands in `extra_args`.
+- **A value went to the wrong argument:** for example, the namespace appears in `names`.
+
+How the spec format works:
+- **Extending a bundled spec:** a spec for a command that is already bundled extends it.
+  Options are merged by flag, and subcommands one by one. Write `extend: false` to replace it
+  completely.
+- **Flags after the subcommand:** mark them `global: true` when the real CLI accepts them
+  after the subcommand (kubectl, helm, gh, aws). git's `-C` is not global.
+- **Testing the spec:** after adding one, re-run `agentltl translate` to check it. Keep it in
+  the same `AGENTLTL.yaml` as the rule. In `~/.claude/AGENTLTL.yaml`, it applies in every
+  project.
 
 ## Limits (tell the user when they matter)
 

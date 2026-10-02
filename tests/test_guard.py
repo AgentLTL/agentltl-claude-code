@@ -233,3 +233,17 @@ class TestMemoryFirst:
         assert run(g, write) == ["none"]
         g = self.guard(tmp_path, "rules: [{id: memory-first, never: Write, mode: log}]")
         assert g.decide(*write).action == "none"
+
+
+class TestProjectSpecs:
+    def test_a_project_spec_extends_the_bundled_one_and_reaches_bash(self):
+        g = guard_for("rules: [{id: r, never: {tool: 'kubectl_*', with: {namespace: prod}}}]\n"
+                      "tools:\n  kubectl:\n    subcommands:\n"
+                      "      rollout: {positionals: [{name: action}, {name: resource}]}")
+        assert run(g, "kubectl rollout restart deploy/web -n prod", "kubectl delete pod x -n prod",
+                   "kubectl delete pod x -n dev") == ["deny", "deny", "none"]
+
+    def test_extend_false_replaces_it(self):
+        g = guard_for("rules: [{id: r, never: kubectl_delete}]\n"
+                      "tools:\n  kubectl: {extend: false, subcommands: {rollout: {}}}")
+        assert g.translator.translate("kubectl delete pod x")[0].args.get("argv")

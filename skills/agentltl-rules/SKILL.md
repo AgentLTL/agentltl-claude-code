@@ -36,6 +36,11 @@ If the user wants to remove, switch off or loosen a rule, go to
    - Run `agentltl translate "<a command the rule is about>"` for one or two typical commands,
      for example `agentltl translate "git push --force origin main"`.
    - Run `agentltl tools 'git_*'` to list the tools and their arguments.
+   - If the argument the rule needs is not named, add or extend a spec under `tools:`. That
+     happens when the result is `{"argv": [...]}` (no spec), when the flag is in
+     `extra_args`, or when a value landed in the wrong argument. See "When a command needs a
+     spec" in reference.md. The spec applies to Claude's Bash calls too, not just to
+     `translate`.
    - Claude Code's own tools keep their names (`Edit`, `Write`, `Read`, `WebFetch`, `mcp__...`)
      and their input fields (`file_path`).
    - Think about every way the action can be done. "Don't touch .env" covers `Edit`, `Write`,

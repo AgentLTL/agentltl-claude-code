@@ -1,41 +1,18 @@
 #!/usr/bin/env bash
 # Hook launcher: finds the plugin's Python and runs the guard from this plugin directory.
-# $1 is the hook event. On SessionStart it builds the virtualenv first if it is missing, or
-# rebuilds it when vendor.lock changed (a plugin update that moved a dependency pin).
+# $1 is the hook event. The first hook of a plugin version whose dependency pins have no
+# environment yet builds it (see scripts/env.sh), whichever hook that is: /reload-plugins
+# after an update does not fire SessionStart.
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../scripts/env.sh
+source "$root/scripts/env.sh"
 
-find_python() {
-    local c
-    for c in "${AGENTLTL_CC_PYTHON:-}" \
-             "${CLAUDE_PLUGIN_DATA:+$CLAUDE_PLUGIN_DATA/venv/bin/python}" \
-             "$root/.venv/bin/python"; do
-        if [[ -n "$c" && -x "$c" ]]; then echo "$c"; return 0; fi
-    done
-    return 1
-}
-
-setup() {
-    # One build at a time: parallel tool calls each run this hook. mkdir is an atomic lock
-    # that works everywhere (flock does not exist on macOS).
-    local lock="${CLAUDE_PLUGIN_DATA:-$root}/.setup.lock" waited=0
-    mkdir -p "$(dirname "$lock")"
-    while ! mkdir "$lock" 2>/dev/null; do
-        sleep 1; waited=$((waited + 1))
-        if (( waited > 90 )); then rm -rf "$lock"; fi   # a crashed build left it behind
-    done
-    if [[ -z "$(find_python)" || "${1:-}" == "rebuild" ]]; then
-        "$root/scripts/setup.sh" >&2
-    fi
-    rmdir "$lock"
-}
-
-py="$(find_python)"
+py="$(env_python)"
 if [[ -z "$py" ]]; then
-    # First hook after an install, whichever it is: /reload-plugins does not fire SessionStart.
-    setup && py="$(find_python)"
-elif [[ "$1" == "SessionStart" && -z "${AGENTLTL_CC_PYTHON:-}" ]] \
-        && ! cmp -s "$root/vendor.lock" "$(dirname "$(dirname "$py")")/vendor.lock"; then
-    setup rebuild    # an update moved a dependency pin
+    env_build && py="$(env_python)"
+fi
+if [[ "$1" == "SessionStart" ]]; then
+    env_touch_and_prune
 fi
 if [[ -z "$py" ]]; then
     # Not installed. Stay out of the way unless rules exist, in which case say so loudly.
