@@ -12,15 +12,34 @@ checks every tool call against the rules in `AGENTLTL.yaml` **before it runs**, 
 the ones that break them.
 
 ```
-> commit and push
+> ship 1.6.0 to prod
 
-  Bash  git add app.py && git commit -m "Fix login" && git push
-  ✗ Rule 'tests-before-push' blocked this call. Nothing was executed.
-    Problem: git_push needs pytest to have run first since the last edit.
+  Bash  helm upgrade web repo/web --version 1.6.0 -n prod
+  ✗ Rule 'promote-what-staging-ran' blocked this call. Nothing was executed.
+    Problem: for chart='repo/web', v='1.6.0': no earlier helm_upgrade call had
+             namespace='staging', chart='repo/web', version='1.6.0'.
 
-  Bash  pytest -q                                               ✓
-  Bash  git add app.py && git commit -m "Fix login" && git push  ✓
+  Bash  helm upgrade web repo/web --version 1.6.0 -n staging    ✓
+  Bash  curl -fsS https://staging.example.com/health            ✓
+  Bash  helm upgrade web repo/web --version 1.6.0 -n prod       ✓
 ```
+
+One rule did that:
+
+```yaml
+- id: promote-what-staging-ran
+  before:
+    first: {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: staging}}
+    then:  {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: prod}}
+  scope: project       # the staging deploy may have been yesterday, in another session
+```
+
+A plain command filter can only allow or forbid `helm upgrade`. This rule also knows:
+- **order:** prod comes after staging;
+- **values across calls:** the *same* chart and version, so staging on 1.5.2 doesn't let 1.6.0
+  through;
+- **memory across sessions:** yesterday's staging deploy counts;
+- **the real command line:** `-n prod` is the namespace, wherever it appears.
 
 ## Features
 
@@ -163,17 +182,11 @@ Rules for every project go in `~/.claude/AGENTLTL.yaml`.
 
 A per-call checker can say "never run `terraform apply`". It can't say "apply only the plan
 that was reviewed", because that depends on an earlier call and on what its arguments were.
-AgentLTL can. A `$variable` in a `before` rule must take the same value in both calls:
+AgentLTL can. A `$variable` in a `before` rule must take the same value in both calls, as in
+the staging-to-prod rule at the top. A few more:
 
 ```yaml
 rules:
-  # Production only gets a chart version that already ran in staging, even last week.
-  - id: promote-what-staging-ran
-    before:
-      first: {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: staging}}
-      then:  {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: prod}}
-    scope: project
-
   # Apply exactly the plan that was shown, never a fresh one computed on the spot.
   - id: apply-the-reviewed-plan
     before:
@@ -198,14 +211,6 @@ rules:
 What that looks like in a session:
 
 ```
-  Bash  helm upgrade web repo/web --version 1.6.0 -n prod
-  ✗ Rule 'promote-what-staging-ran' blocked this call. Nothing was executed.
-    Problem: for chart='repo/web', v='1.6.0': no earlier helm_upgrade call had
-             namespace='staging', chart='repo/web', version='1.6.0'.
-
-  Bash  helm upgrade web repo/web --version 1.6.0 -n staging   ✓
-  Bash  helm upgrade web repo/web --version 1.6.0 -n prod      ✓
-
   Bash  rm scratch.txt README.md
   ✗ Rule 'delete-only-what-you-wrote' blocked this call. Nothing was executed.
     Problem: for f='/repo/README.md': no earlier Write call had file_path='/repo/README.md'.
