@@ -53,6 +53,30 @@ about a tool or argument name that nothing produces (such a rule never fires, or
 tool named after the executable, with a single `argv` list (`where: {argv: "--prod"}`). Output
 redirections (`> file`, `>> file`) appear as `redirect_to`.
 
+## Variables: the same value in two calls
+
+A `with` value written `$name` is a variable. In a `before` rule it ties the two calls to the
+same value, implicitly for every value. "Read a file before you overwrite it":
+
+```yaml
+- id: read-before-overwrite
+  before:
+    first: {tool: Read, with: {file_path: $f}}
+    then:
+      - {tool: [Edit, Write], with: {file_path: $f}, exists: true}   # new files are fine
+      - {tool: rm, with: {paths: $f}}
+```
+
+It reads as `now(Edit, file_path=f) -> called(Read, file_path=f)`, for every `f`. It compiles
+to AgentLTL's `ForAll` + `Var` + `CalledWith`, over the values in the call being checked.
+
+- Path arguments are made absolute first, so `rm a.py` and `Read /proj/a.py` match.
+- Use one variable, and bind it on every target of both sides.
+- On the `first` side, give only `with` values (AgentLTL compares them for equality), and use a
+  single-valued argument. `cat`'s `paths` is a list and never equals one file;
+  `agentltl validate` warns about it.
+- `since` cannot be combined with a variable yet.
+
 ## Rule kinds
 
 | Kind | Meaning |

@@ -43,8 +43,11 @@ def test_exists(tmp_path):
     assert old.matches("Write", {"file_path": "m/001.sql"}, paths)
     assert not old.matches("Write", {"file_path": "m/002.sql"}, paths)
     assert new.matches("Write", {"file_path": "m/002.sql"}, paths)
-    with pytest.raises(Exception, match="next to a 'where'"):
-        parse_target({"tool": "Write", "exists": True}, "t")
+    any_path = parse_target({"tool": "Write", "exists": True}, "t")
+    assert any_path.matches("Write", {"file_path": "m/001.sql"}, paths)
+    assert not any_path.matches("Write", {"file_path": "m/002.sql"}, paths)
+    with pytest.raises(Exception, match="must be true or false"):
+        parse_target({"tool": "Write", "exists": "yes"}, "t")
 
 
 class TestValidation:
@@ -97,9 +100,10 @@ rules:
   - {id: e, never: {tool: npm, with: {argv: install}}}
   - {id: f, never: {tool: git_notes, where: {"*": "*x*"}}}
   - {id: g, never: {tool: git_notes, with: {message: x}}}
+  - {id: h, before: {first: {tool: cat, with: {paths: $f}}, then: {tool: Edit, with: {file_path: $f}}}}
 """)
         warnings = lint(rs)
-        assert [w.split(":")[0] for w in warnings] == ["a", "b", "c", "g"]
+        assert [w.split(":")[0] for w in warnings] == ["a", "b", "c", "g", "h"]
         assert "'remote'" in warnings[0] and "make_test" in warnings[1]
 
 
@@ -162,6 +166,35 @@ rules:
         assert run(g, "curl https://api.github.com/x", "curl https://evil.example/x", fetch,
                    ("WebFetch", {"url": "https://pypi.org/p"}), "ls") == [
             "none", "deny", "deny", "none", "none"]
+
+    def test_before_with_a_variable_ties_two_calls_to_the_same_value(self, tmp_path):
+        (tmp_path / "old.py").write_text("x")
+        g = guard_for("""
+rules:
+  - id: r
+    before:
+      first: {tool: Read, with: {file_path: $f}}
+      then:
+        - {tool: [Edit, Write], with: {file_path: $f}, exists: true}
+        - {tool: rm, with: {paths: $f}}
+""", cwd=str(tmp_path))
+        old, new = str(tmp_path / "old.py"), str(tmp_path / "new.py")
+        assert run(g, ("Write", {"file_path": old}), ("Write", {"file_path": new}),
+                   ("Read", {"file_path": old}), ("Edit", {"file_path": "old.py"}),
+                   "rm new.py old.py") == ["deny", "none", "none", "none", "deny"]
+
+    @pytest.mark.parametrize("before,fragment", [
+        ("{first: {tool: Read, with: {file_path: $f}}, then: {tool: Edit, with: {file_path: $g}}}",
+         "exactly one $variable"),
+        ("{first: {tool: Read, with: {file_path: $f}}, then: Edit}", "must bind $f"),
+        ("{first: {tool: Read, with: {file_path: $f}}, then: {tool: Edit, with: {file_path: $f}},"
+         " since: Write}", "'since' cannot be combined"),
+        ("{first: {tool: Read, with: {file_path: $f}, where: {x: y}}, "
+         "then: {tool: Edit, with: {file_path: $f}}}", "'with' values only"),
+    ])
+    def test_variable_misuse_is_reported(self, before, fragment):
+        with pytest.raises(RuleFileError, match=fragment.replace("$", r"\$")):
+            loads(f"rules: [{{id: r, before: {before}}}]")
 
     def test_ltl(self):
         g = guard_for("""rules: [{id: r, ltl: 'G(called("git_rebase") -> before("git_fetch", "git_rebase"))'}]""")

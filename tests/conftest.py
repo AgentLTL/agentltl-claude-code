@@ -14,7 +14,8 @@ def _isolated(tmp_path, monkeypatch):
 
 
 def guard_for(text, cwd="/proj"):
-    g = Guard(loads(text), Paths(cwd, "/proj"))
+    paths = Paths(cwd, "/proj")
+    g = Guard(loads(text, paths), paths)
     g.restore({})
     return g
 

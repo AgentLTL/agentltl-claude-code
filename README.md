@@ -55,6 +55,12 @@ rules:
     why: Applied migrations must not change; add a new one instead.
     mode: ask                         # you decide
 
+  - id: read-before-overwrite
+    before:
+      first: {tool: Read, with: {file_path: $f}}         # $f: the same file on both sides
+      then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}
+    why: Look at a file before replacing it.
+
   - id: one-release
     at_most: {call: {tool: make, with: {argv: release}}, times: 1}
     scope: project                    # counts across every session in this project
@@ -166,6 +172,9 @@ Targets:
 - narrow it with `with` (equal values) or `where` (globs on values; the key `"*"` means any
   argument);
 - add `exists: true/false` to match only paths that already exist, or only new ones;
+- write a `with` value as `$f` to tie two calls to the same value in a `before` rule:
+  "read a file before overwriting it" is `first: {tool: Read, with: {file_path: $f}}`,
+  `then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}`;
 - give a list of targets to match any of them.
 
 `tools:` takes cli-to-tools specs for project commands, so rules can name their arguments.

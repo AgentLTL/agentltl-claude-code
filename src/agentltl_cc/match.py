@@ -22,6 +22,13 @@ migration" does not also catch creating a new one:
 
     {tool: Write, where: {file_path: "migrations/*"}, exists: true}
 
+A ``with`` value written ``$name`` is a variable, not a literal: ``before`` uses it to tie
+two calls together (``{tool: Read, with: {file_path: $f}}`` before
+``{tool: Edit, with: {file_path: $f}}`` means "the same file").
+
+Path arguments (``file_path``, ``paths``, ``redirect_to``, ...) are made absolute before
+rules see them, so ``cat a.py`` and ``Read /proj/a.py`` name the same file.
+
 A list of targets matches when any of them does:
 
     [{tool: Write, where: {file_path: "*.lock"}}, {tool: rm, where: {paths: "*.lock"}}]
@@ -39,6 +46,11 @@ class RuleError(ValueError):
     """A rule file entry that cannot be compiled."""
 
 
+# Arguments holding file paths, in Claude Code tools and in the cli-to-tools packs.
+PATH_KEYS = ("file_path", "notebook_path", "path", "paths", "file", "files", "redirect_to",
+             "directory")
+
+
 @dataclass(frozen=True)
 class Paths:
     """Where relative paths in arguments are resolved from."""
@@ -53,13 +65,17 @@ class Target:
     with_: Dict[str, Any] = field(default_factory=dict)
     where: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
     exists: Optional[bool] = None
+    variables: Dict[str, str] = field(default_factory=dict)   # argument -> variable name
 
     def matches(self, name: str, args: Optional[Dict[str, Any]], paths: Paths) -> bool:
         if name not in self.tools:
             return False
         args = args or {}
         for key, expected in self.with_.items():
-            if not _equal(expected, args.get(key)):
+            actual = args.get(key)
+            if not _equal(expected, actual) and not (
+                    key in PATH_KEYS and isinstance(expected, str)
+                    and _equal(_absolute(expected, paths), actual)):
                 return False
         hits: List[str] = []
         for key, patterns in self.where.items():
@@ -69,12 +85,15 @@ class Target:
                 return False
             hits += found
         if self.exists is not None:
+            if not self.where:   # no glob narrowed it: judge the path arguments themselves
+                hits = [v for key in PATH_KEYS for v in _strings(args.get(key))]
             return any(os.path.exists(_absolute(v, paths)) == self.exists for v in hits)
         return True
 
     def describe(self) -> str:
         tools = " or ".join(self.tools)
         parts = [f"{k}={v!r}" for k, v in self.with_.items()]
+        parts += [f"{k}=${v}" for k, v in self.variables.items()]
         parts += [f"{k} matching {' or '.join(v)}" for k, v in self.where.items()]
         if self.exists is not None:
             parts.append("existing path" if self.exists else "new path")
@@ -109,15 +128,43 @@ def parse_target(spec: Any, where: str, *, with_: Any = None, where_: Any = None
             raise RuleError(f"{where}: unknown key(s) {sorted(unknown)} "
                             "(expected tool, with, where, exists)")
         exists = spec.get("exists")
-        if exists is not None and (not isinstance(exists, bool) or not (spec.get("where") or where_)):
-            raise RuleError(f"{where}.exists: must be true or false, next to a 'where'")
+        if exists is not None and not isinstance(exists, bool):
+            raise RuleError(f"{where}.exists: must be true or false")
         if "tool" not in spec:
             raise RuleError(f"{where}: a target needs 'tool'")
         tools = _names(spec["tool"], where)
         w = {**_mapping(spec.get("with"), f"{where}.with"), **_mapping(with_, "with")}
         g = {**_patterns(spec.get("where"), f"{where}.where"), **_patterns(where_, "where")}
-        return Target(tools, w, g, exists)
-    return Target(_names(spec, where), _mapping(with_, "with"), _patterns(where_, "where"))
+        return _with_variables(Target(tools, w, g, exists))
+    return _with_variables(Target(_names(spec, where), _mapping(with_, "with"),
+                                  _patterns(where_, "where")))
+
+
+def _with_variables(target: Target) -> Target:
+    """Move ``$name`` values out of ``with`` into ``variables``."""
+    for key, value in list(target.with_.items()):
+        if isinstance(value, str) and value.startswith("$") and value[1:].isidentifier():
+            target.variables[key] = value[1:]
+            del target.with_[key]
+    return target
+
+
+def normalize_paths(args: Dict[str, Any], paths: Paths) -> Dict[str, Any]:
+    """*args* with path arguments made absolute (flags and URLs left alone)."""
+    out = dict(args)
+    for key in PATH_KEYS:
+        value = out.get(key)
+        if isinstance(value, str):
+            out[key] = _canonical(value, paths)
+        elif isinstance(value, list):
+            out[key] = [_canonical(v, paths) if isinstance(v, str) else v for v in value]
+    return out
+
+
+def _canonical(value: str, paths: Paths) -> str:
+    if not value or value.startswith(("-", "http://", "https://", "$")):
+        return value
+    return _absolute(value, paths)
 
 
 def _names(spec: Any, where: str) -> Tuple[str, ...]:

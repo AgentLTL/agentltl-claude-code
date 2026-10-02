@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
-from .match import Paths
+from .match import Paths, normalize_paths
 from .rules import MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
@@ -81,13 +81,18 @@ class GuardTranslator(Translator):
     ``echo x > .env`` then matches ``where: {redirect_to: "**/.env"}`` like a Write would.
     """
 
+    paths: Optional[Paths] = None
+
     def _call(self, node: Any, command: str, call_id: str, index: int) -> ToolCall:
         call = super()._call(node, command, call_id, index)
+        if self.paths is not None:
+            call.args = normalize_paths(call.args, self.paths)
         targets = [r["target"] for r in node.redirects
                    if r.get("target") and ">" in r.get("op", "") and r.get("fd") not in ("2",)
                    and not r["target"].startswith("&")]
         if targets:
-            call.args["redirect_to"] = targets
+            call.args["redirect_to"] = (normalize_paths({"redirect_to": targets}, self.paths)
+                                        ["redirect_to"] if self.paths else targets)
         return call
 
 
@@ -111,12 +116,23 @@ def lint(ruleset: RuleSet, registry: Optional[SpecRegistry] = None) -> List[str]
     ``require``, fires on every call.
     """
     registry = registry or translator_for(ruleset).registry
-    schemas = {s["name"]: set(s.get("parameters", {}).get("properties", {}))
-               for s in registry.tool_schemas()}
+    props = {s["name"]: s.get("parameters", {}).get("properties", {})
+             for s in registry.tool_schemas()}
+    schemas = {name: set(p) for name, p in props.items()}
     out: List[str] = []
     for rule in ruleset.rules:
+        if rule.kind == "before" and rule.targets:
+            for target in _flatten(rule.targets[:1]):
+                for tool in target.tools:
+                    lists = sorted(arg for arg in target.variables
+                                   if props.get(tool, {}).get(arg, {}).get("type") == "array")
+                    if lists:
+                        out.append(f"{rule.id}: {tool}.{lists[0]} is a list, and a $variable "
+                                   "on the 'first' side is compared with the whole list, so "
+                                   f"`{tool.replace('_', ' ')} a b` never matches one file. "
+                                   "Use a single-valued argument (e.g. Read's file_path).")
         for target in _flatten(rule.targets):
-            keys = set(target.with_) | set(target.where)
+            keys = set(target.with_) | set(target.where) | set(target.variables)
             for tool in target.tools:
                 if tool[:1].isupper() or tool.startswith("mcp__"):
                     continue
@@ -165,6 +181,7 @@ class Guard:
         self.ruleset = ruleset
         self.paths = paths or Paths(os.getcwd())
         self.translator = translator_for(ruleset)
+        self.translator.paths = self.paths
         self.enforcers = {
             scope: CliConstraintEnforcer(
                 constraints=ruleset.constraints(scope),
@@ -217,7 +234,12 @@ class Guard:
         """
         if tool_name in SHELL_TOOLS:
             return self.translator.translate((tool_input or {}).get(SHELL_TOOLS[tool_name]) or "")
-        return [ToolCall(tool_name, dict(tool_input or {}), "", {})]
+        return [ToolCall(tool_name, self._input(tool_name, tool_input), "", {})]
+
+    def _input(self, tool_name: str, tool_input: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """The arguments rules see: path arguments of non-shell tools made absolute."""
+        tool_input = dict(tool_input or {})
+        return tool_input if tool_name in SHELL_TOOLS else normalize_paths(tool_input, self.paths)
 
     def decide(self, tool_name: str, tool_input: Dict[str, Any], *, auto: bool = False) -> Verdict:
 
@@ -245,7 +267,8 @@ class Guard:
         logged = len(enf._constraint_violations)
         blocked = len(enf._soft_blocked_calls)
         try:
-            decision = enf.check(tool_name, tool_input, len(enf._completed_tool_calls) + 1)
+            decision = enf.check(tool_name, self._input(tool_name, tool_input),
+                                 len(enf._completed_tool_calls) + 1)
         except ConstraintViolationError as exc:
             enf._run_status, enf._stopped_by = "completed", None
             rule = self.ruleset.get(exc.constraint_name)
@@ -284,7 +307,7 @@ class Guard:
     def record(self, tool_name: str, tool_input: Dict[str, Any], tool_id: str,
                result: Any) -> None:
         """Add a call that has run to the session and project traces."""
-        tool_input = _trim(dict(tool_input or {}))
+        tool_input = _trim(self._input(tool_name, tool_input))
         text = result if isinstance(result, str) else ("" if result is None else str(result))
         text = text[:_MAX_STRING]
         for enf in self.enforcers.values():
