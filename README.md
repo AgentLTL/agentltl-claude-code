@@ -26,6 +26,9 @@ the ones that break them.
 
 - **Order-aware rules:** enforce sequences, not just single calls: tests before push, plan before
   apply, staging before prod. Per session or across the whole project.
+- **Variables across calls:** `$variables` tie calls together by their arguments: apply only
+  the plan that was reviewed, promote only the exact version that ran in staging, delete only
+  the files Claude wrote itself.
 - **Real shell parsing:** `git commit -am x && git push -f` is checked as `git_commit` then
   `git_push{force: true}`, all or nothing.
 - **Plain-language rules:** ask Claude to "add a rule: never push to main"; it writes the rule
@@ -155,6 +158,67 @@ rules:
 ```
 
 Rules for every project go in `~/.claude/AGENTLTL.yaml`.
+
+### Rules that connect calls
+
+A per-call checker can say "never run `terraform apply`". It can't say "apply only the plan
+that was reviewed", because that depends on an earlier call and on what its arguments were.
+AgentLTL can. A `$variable` in a `before` rule must take the same value in both calls:
+
+```yaml
+rules:
+  # Production only gets a chart version that already ran in staging, even last week.
+  - id: promote-what-staging-ran
+    before:
+      first: {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: staging}}
+      then:  {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: prod}}
+    scope: project
+
+  # Apply exactly the plan that was shown, never a fresh one computed on the spot.
+  - id: apply-the-reviewed-plan
+    before:
+      first: {tool: terraform_plan, with: {out: $plan}}
+      then:  {tool: terraform_apply, with: {plan: $plan}}
+  - id: apply-a-saved-plan
+    require: {tool: terraform_apply, where: {plan: "?*"}}
+
+  # Claude may clean up the files it wrote, and nothing else.
+  - id: delete-only-what-you-wrote
+    before:
+      first: {tool: Write, with: {file_path: $f}}
+      then:  {tool: rm, with: {paths: $f}}
+
+  # Never run a SQL file that has not been read first.
+  - id: read-sql-before-running-it
+    before:
+      first: {tool: Read, with: {file_path: $f}}
+      then:  {tool: psql, with: {file: $f}}
+```
+
+What that looks like in a session:
+
+```
+  Bash  helm upgrade web repo/web --version 1.6.0 -n prod
+  ✗ Rule 'promote-what-staging-ran' blocked this call. Nothing was executed.
+    Problem: for chart='repo/web', v='1.6.0': no earlier helm_upgrade call had
+             namespace='staging', chart='repo/web', version='1.6.0'.
+
+  Bash  helm upgrade web repo/web --version 1.6.0 -n staging   ✓
+  Bash  helm upgrade web repo/web --version 1.6.0 -n prod      ✓
+
+  Bash  rm scratch.txt README.md
+  ✗ Rule 'delete-only-what-you-wrote' blocked this call. Nothing was executed.
+    Problem: for f='/repo/README.md': no earlier Write call had file_path='/repo/README.md'.
+```
+
+The checks work the way you'd want:
+- **Every value is checked:** `rm a b` needs both files to have been written.
+- **Variables combine:** a different chart with the same version doesn't count.
+- **Paths are compared in one form:** `Read migrations/007.sql` and `psql -f ./migrations/007.sql`
+  name the same file.
+
+Under the hood, each rule is a first-order temporal formula, for example: for all chart `c`
+and version `v`, every `helm_upgrade(c, v, prod)` comes after a `helm_upgrade(c, v, staging)`.
 
 ### Rules instead of memory
 

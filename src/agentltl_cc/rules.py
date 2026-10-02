@@ -568,12 +568,14 @@ def _parts_with_variables(target: Any) -> List[Any]:
 
 
 def _before_same_value(a: Any, b: Any, since: Any, paths: Paths, where: str) -> Tuple[Any, ...]:
-    """``before`` whose two sides share a ``$variable``: compiled to AgentLTL's
+    """``before`` whose two sides share ``$variables``: compiled to AgentLTL's
     ``ForAll(x in <values of the call being checked>, CalledWith(first, {arg: Var(x)}))``.
 
-    The variable is implicitly universal, ``now(then, k=x) -> called(first, k2=x)`` for every
+    A variable is implicitly universal, ``now(then, k=x) -> called(first, k2=x)`` for every
     x. Its domain is the values in the call being checked, so -- like the other rule kinds --
     the rule judges only that call and an earlier violation never blocks unrelated calls.
+    Several variables nest one ForAll each: with single values (a chart and its version) the
+    earlier call must have had that exact combination; with lists, every combination.
     """
     from functools import reduce
 
@@ -581,36 +583,43 @@ def _before_same_value(a: Any, b: Any, since: Any, paths: Paths, where: str) -> 
 
     if since is not None:
         raise RuleError(f"{where}: 'since' cannot be combined with $variables yet")
-    names = {v for t in _parts(a) + _parts(b) for v in t.variables.values()}
-    if len(names) != 1:
-        raise RuleError(f"{where}: use exactly one $variable, on both 'first' and 'then' "
-                        f"(found {sorted(names) or 'none'})")
-    var = names.pop()
+    names = sorted({v for t in _parts(a) + _parts(b) for v in t.variables.values()})
+    if not names:
+        raise RuleError(f"{where}: use a $variable on both 'first' and 'then'")
     for t in _parts(a) + _parts(b):
-        if var not in t.variables.values():
-            raise RuleError(f"{where}: every target must bind ${var} ({t.describe()} does not)")
+        missing = [n for n in names if n not in t.variables.values()]
+        if missing:
+            raise RuleError(f"{where}: every target must bind "
+                            f"{', '.join('$' + n for n in missing)} ({t.describe()} does not)")
     for t in _parts(a):
         if t.where or t.exists is not None:
             raise RuleError(f"{where}.first: with a $variable, 'first' takes 'with' values only "
                             "(AgentLTL compares them for equality)")
 
-    def domain(trace: Any, metrics: Any = None) -> List[Any]:
-        calls = list(trace.calls)
-        if not calls:
-            return []
-        c = calls[-1]
-        values: List[Any] = []
-        for t in _parts(b):
-            if t.matches(c.name, c.args, paths):
-                for arg, name in t.variables.items():
-                    value = c.args.get(arg)
-                    values += value if isinstance(value, list) else [value]
-        return [v for v in dict.fromkeys(x for x in values if x is not None)]
+    def domain_of(var: str) -> Callable[..., List[Any]]:
+        def domain(trace: Any, metrics: Any = None) -> List[Any]:
+            calls = list(trace.calls)
+            if not calls:
+                return []
+            c = calls[-1]
+            values: List[Any] = []
+            for t in _parts(b):
+                if t.matches(c.name, c.args, paths):
+                    for arg, name in t.variables.items():
+                        if name == var:
+                            value = c.args.get(arg)
+                            values += value if isinstance(value, list) else [value]
+            return [v for v in dict.fromkeys(x for x in values if x is not None)]
+        return domain
 
-    branches = [CalledWith(tool, {**t.with_, **{arg: Var(var) for arg in t.variables}})
+    branches = [CalledWith(tool, {**t.with_, **{arg: Var(name) for arg, name in t.variables.items()}})
                 for t in _parts(a) for tool in t.tools]
-    body = reduce(Or, branches)
-    formula = ForAll(var, domain, body, description=f"values of ${var} in {b.describe()}")
+    formula = reduce(Or, branches)
+    # One ForAll per variable, innermost last: every value (combination) the call being
+    # checked has must have appeared together in an earlier `first` call.
+    for var in reversed(names):
+        formula = ForAll(var, domain_of(var), formula,
+                         description=f"values of ${var} in {b.describe()}")
     return formula, a.tools + b.tools, a, b
 
 

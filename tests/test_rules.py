@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from agentltl_cc.guard import lint
@@ -185,7 +187,7 @@ rules:
 
     @pytest.mark.parametrize("before,fragment", [
         ("{first: {tool: Read, with: {file_path: $f}}, then: {tool: Edit, with: {file_path: $g}}}",
-         "exactly one $variable"),
+         "must bind $g"),
         ("{first: {tool: Read, with: {file_path: $f}}, then: Edit}", "must bind $f"),
         ("{first: {tool: Read, with: {file_path: $f}}, then: {tool: Edit, with: {file_path: $f}},"
          " since: Write}", "'since' cannot be combined"),
@@ -195,6 +197,37 @@ rules:
     def test_variable_misuse_is_reported(self, before, fragment):
         with pytest.raises(RuleFileError, match=fragment.replace("$", r"\$")):
             loads(f"rules: [{{id: r, before: {before}}}]")
+
+    PROMOTE = """
+rules:
+  - id: promote
+    before:
+      first: {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: staging}}
+      then: {tool: helm_upgrade, with: {chart: $chart, version: $v, namespace: prod}}
+    scope: project
+"""
+
+    def test_several_variables_must_match_together(self):
+        g = guard_for(self.PROMOTE)
+        assert run(g, "helm upgrade web repo/web --version 2 -n staging",
+                   "helm upgrade web repo/web --version 3 -n prod",
+                   "helm upgrade web repo/api --version 2 -n prod",
+                   "helm upgrade web repo/web --version 2 -n prod") == ["none", "deny", "deny", "none"]
+
+    def test_the_refusal_says_which_values_had_no_earlier_call(self):
+        v = guard_for(self.PROMOTE).decide("Bash", {"command": "helm upgrade web repo/web --version 3 -n prod"})
+        assert ("for chart='repo/web', v='3': no earlier helm_upgrade call had "
+                "namespace='staging', chart='repo/web', version='3'.") in v.reason
+
+    def test_with_project_scope_the_earlier_call_can_be_in_another_session(self):
+        g = guard_for(self.PROMOTE)
+        run(g, "helm upgrade web repo/web --version 2 -n staging")
+        project = json.loads(json.dumps(g.dump_project()))
+        later = guard_for(self.PROMOTE)
+        later.restore({}, project)                 # a new session in the same project
+        assert run(later, "helm upgrade web repo/web --version 2 -n prod") == ["none"]
+        fresh = guard_for(self.PROMOTE)
+        assert run(fresh, "helm upgrade web repo/web --version 2 -n prod") == ["deny"]
 
     def test_ltl(self):
         g = guard_for("""rules: [{id: r, ltl: 'G(called("git_rebase") -> before("git_fetch", "git_rebase"))'}]""")

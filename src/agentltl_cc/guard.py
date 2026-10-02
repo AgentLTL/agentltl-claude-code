@@ -24,6 +24,7 @@ permission flow (your settings, auto mode) still decides.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -446,7 +447,7 @@ class Guard:
 
     @staticmethod
     def _detail(name: str, detail: str) -> str:
-        return str(detail or "").strip()
+        return _plain(str(detail or "").strip())
 
     @staticmethod
     def _segment(calls: List[ToolCall], name: Optional[str], args: Any) -> str:
@@ -485,6 +486,40 @@ class Guard:
             lines.append(f"To comply: {rule.fix}")
         lines.append(tail or _TAILS.get(mode, ""))
         return "\n".join(line for line in lines if line)
+
+
+_FORALL = re.compile(r"^∀(\w+): failed for \1=('(?:[^'\\]|\\.)*'|\S+)\.\s*")
+_CALLED_BUT = re.compile(r'^"([^"]+)" was called but not with the expected arguments (\{.*\})\.?$', re.S)
+_NEVER = re.compile(r'^"([^"]+)" was never called\.?$')
+
+
+def _plain(detail: str) -> str:
+    """AgentLTL's explanation of a failed `before` with $variables, in plain words:
+    "for chart='web', v='2': no earlier helm_upgrade had namespace='staging', ...". Any
+    other text is returned unchanged."""
+    bound: List[str] = []
+    while True:
+        m = _FORALL.match(detail)
+        if not m:
+            break
+        bound.append(f"{m.group(1)}={m.group(2)}")
+        detail = detail[m.end():]
+    if not bound:
+        return detail
+    m = _CALLED_BUT.match(detail)
+    if m:
+        try:
+            import ast
+            args = ast.literal_eval(m.group(2))
+            shown = ", ".join(f"{k}={v!r}" for k, v in args.items())
+        except (ValueError, SyntaxError):
+            shown = m.group(2)
+        detail = f"no earlier {m.group(1)} call had {shown}."
+    else:
+        m = _NEVER.match(detail)
+        if m:
+            detail = f"{m.group(1)} was never called."
+    return f"for {', '.join(bound)}: {detail}"
 
 
 def _shell_side(rule: Rule) -> bool:

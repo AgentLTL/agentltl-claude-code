@@ -92,7 +92,9 @@ It reads as `now(Edit, file_path=f) -> called(Read, file_path=f)`, for every `f`
 to AgentLTL's `ForAll` + `Var` + `CalledWith`, over the values in the call being checked.
 
 - Path arguments are made absolute first, so `rm a.py` and `Read /proj/a.py` match.
-- Use one variable, and bind it on every target of both sides.
+- Bind every variable on every target of both sides. Several variables must match together:
+  `{chart: $chart, version: $v}` needs an earlier call with that same chart and version. With
+  list arguments, every combination of values needs an earlier call.
 - On the `first` side, give only `with` values (AgentLTL compares them for equality), and use a
   single-valued argument. `cat`'s `paths` is a list and never equals one file;
   `agentltl validate` warns about it.
