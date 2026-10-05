@@ -170,7 +170,7 @@ class TestWriteTargets:
     def test_an_unknown_value_only_makes_its_own_argument_uncertain(self):
         g = guard_for("rules: [{id: r, never: {tool: '*', where: {redirect_to: '*.md'}}}]")
         assert run(g, "cd $SOMEWHERE", "rm $F", "echo x > $F", "ls | xargs echo > a.txt"
-                   ) == ["none", "none", "deny", "deny"]
+                   ) == ["none", "none", "deny", "none"]   # the redirection is known: a.txt
 
     def test_xargs_cannot_add_a_redirection(self):
         g = guard_for("rules: [{id: r, never: {tool: '*', where: {redirect_to: '*.md'}}}]")
