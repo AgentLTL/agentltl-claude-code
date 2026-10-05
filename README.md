@@ -4,6 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)](https://docs.claude.com/en/docs/claude-code)
 [![arXiv](https://img.shields.io/badge/arXiv-2607.02599-b31b1b.svg)](https://arxiv.org/abs/2607.02599)
+[![Docs](https://img.shields.io/badge/docs-agentltl.github.io-3f51b5.svg)](https://agentltl.github.io)
 
 > Rules Claude Code can't forget.
 
@@ -320,6 +321,9 @@ both.
 
 ## Documentation
 
+- **[agentltl.github.io](https://agentltl.github.io)**: the full documentation, from how
+  AgentLTL works to the rule cookbook, the [rule library](https://agentltl.github.io/rules/library/)
+  and every [supported command](https://agentltl.github.io/shell/commands/)
 - [docs/REFERENCE.md](docs/REFERENCE.md): full reference (rule kinds, scopes, CLI, development)
 - [examples/showcase.yaml](examples/showcase.yaml): deploys, git, infrastructure
 - [examples/creative.yaml](examples/creative.yaml): test-first, research hygiene, prompt-injection tripwires
