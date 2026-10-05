@@ -172,6 +172,11 @@ class TestWriteTargets:
         assert run(g, "cd $SOMEWHERE", "rm $F", "echo x > $F", "ls | xargs echo > a.txt"
                    ) == ["none", "none", "deny", "deny"]
 
+    def test_xargs_cannot_add_a_redirection(self):
+        g = guard_for("rules: [{id: r, never: {tool: '*', where: {redirect_to: '*.md'}}}]")
+        assert run(g, "ls | xargs kill", "ls | xargs rm", "ls | xargs echo > notes.md") == [
+            "none", "none", "deny"]
+
     def test_a_require_rule_cannot_be_satisfied_by_unknown_targets(self):
         g = guard_for("rules: [{id: r, require: {tool: rm, where: {paths: 'build/**'}}}]")
         assert run(g, "rm build/a", "ls | xargs rm", "F=build/b; rm $F") == ["none", "deny", "none"]

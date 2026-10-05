@@ -218,10 +218,15 @@ def unknown_path_keys(args: Dict[str, Any]) -> List[str]:
         "$" in v or "`" in v or "{}" in v or "<(" in v for v in _strings(args.get(key)))]
 
 
+# Redirections are written out in the command line itself: `xargs` or `find -exec` can add
+# arguments to a command, never a redirection to it.
+_REDIRECT_KEYS = ("redirect_to", "overwrite_to", "redirect_from")
+
+
 def _unknown(unknown: Any, key: str) -> bool:
     """Whether argument *key* may hold a path only known at run time (see UNKNOWN_PATHS)."""
     if unknown is True:
-        return key == "*" or key in PATH_KEYS
+        return key == "*" or (key in PATH_KEYS and key not in _REDIRECT_KEYS)
     return bool(unknown) and (key == "*" or key in unknown)
 
 
