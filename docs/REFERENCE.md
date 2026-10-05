@@ -5,7 +5,7 @@ it up, see [SETUP.md](../SETUP.md).
 
 Project rules that Claude Code cannot forget. Write them in `AGENTLTL.yaml`, next to
 `CLAUDE.md`, and every tool call Claude makes, shell commands included, is checked against
-them with [AgentLTL](https://github.com/lailanelkoussy/AgentLTL) before it runs. Claude can lose
+them with [AgentLTL](https://github.com/AgentLTL/AgentLTL) before it runs. Claude can lose
 track of a rule written in `CLAUDE.md`, after a compaction, deep into a long session, or inside a
 subagent. A call that breaks an `AGENTLTL.yaml` rule is refused, and Claude is told why.
 
@@ -14,7 +14,7 @@ subagent. A call that breaks an `AGENTLTL.yaml` rule is refused, and Claude is t
 Install it as a Claude Code plugin; this repository is its own marketplace. In Claude Code:
 
 ```
-/plugin marketplace add https://github.com/lailanelkoussy/agentltl-claude-code.git
+/plugin marketplace add https://github.com/AgentLTL/agentltl-claude-code.git
 /plugin install agentltl@agentltl
 ```
 
@@ -24,7 +24,7 @@ this in `~/.claude/settings.json`, which also installs it on any machine that ha
 ```json
 "extraKnownMarketplaces": {
   "agentltl": {"source": {"source": "git",
-                          "url": "https://github.com/lailanelkoussy/agentltl-claude-code.git"},
+                          "url": "https://github.com/AgentLTL/agentltl-claude-code.git"},
                "autoUpdate": true}
 },
 "enabledPlugins": {"agentltl@agentltl": true}
@@ -45,7 +45,7 @@ How it installs and updates:
 ### From a clone (development)
 
 ```bash
-git clone --recurse-submodules https://github.com/lailanelkoussy/agentltl-claude-code
+git clone --recurse-submodules https://github.com/AgentLTL/agentltl-claude-code
 agentltl-claude-code/scripts/setup.sh --dev      # .venv with vendor/AgentLTL and vendor/cli-to-tools
 claude --plugin-dir ./agentltl-claude-code       # this session only
 ```
@@ -137,7 +137,7 @@ Ask Claude ("add a rule that we never push to main"), or run
 How calls are translated:
 
 - **Shell commands:** `Bash` command lines go through
-  [cli-to-tools](https://github.com/lailanelkoussy/cli-to-tools).
+  [cli-to-tools](https://github.com/AgentLTL/cli-to-tools).
   - `git commit -am x && git push -f` is checked as `git_commit{message, all}` then
     `git_push{force: true}`, all or nothing.
   - Output redirections appear as `redirect_to`, and those that truncate the file (`>`, not
@@ -260,7 +260,7 @@ Targets:
   `then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}`;
 - give a list of targets to match any of them.
 
-`tools:` takes [cli-to-tools](https://github.com/lailanelkoussy/cli-to-tools) specs, so rules
+`tools:` takes [cli-to-tools](https://github.com/AgentLTL/cli-to-tools) specs, so rules
 can name the arguments of commands the bundled packs don't cover.
 - **Where they apply:** the same specs are used on Claude's Bash calls and by `agentltl
   translate`, `check` and `tools`.

@@ -66,13 +66,13 @@ A plain command filter can only allow or forbid `helm upgrade`. This rule also k
 Requires Python 3.10+ and git. Paste this into Claude Code:
 
 ```
-Set up the AgentLTL plugin for me by following https://raw.githubusercontent.com/lailanelkoussy/agentltl-claude-code/main/SETUP.md
+Set up the AgentLTL plugin for me by following https://raw.githubusercontent.com/AgentLTL/agentltl-claude-code/main/SETUP.md
 ```
 
 Or install manually:
 
 ```bash
-claude plugin marketplace add https://github.com/lailanelkoussy/agentltl-claude-code.git
+claude plugin marketplace add https://github.com/AgentLTL/agentltl-claude-code.git
 claude plugin install agentltl@agentltl
 ```
 
@@ -302,8 +302,8 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 
 Three Claude Code hooks: `SessionStart` lists the rules to Claude (again after compaction),
 `PreToolUse` checks each call against the rules and the call history, and `PostToolUse` records
-calls that ran. Shell commands are parsed by [cli-to-tools](https://github.com/lailanelkoussy/cli-to-tools);
-rules are evaluated by [AgentLTL](https://github.com/lailanelkoussy/AgentLTL) (linear temporal logic).
+calls that ran. Shell commands are parsed by [cli-to-tools](https://github.com/AgentLTL/cli-to-tools);
+rules are evaluated by [AgentLTL](https://github.com/AgentLTL/AgentLTL) (linear temporal logic).
 
 ## Limitations
 
@@ -326,7 +326,7 @@ both.
 
 ## Research
 
-This plugin is part of a broader research effort around [AgentLTL](https://github.com/lailanelkoussy/AgentLTL),
+This plugin is part of a broader research effort around [AgentLTL](https://github.com/AgentLTL/AgentLTL),
 a language derived from first-order linear temporal logic for expressing procedural rules over
 agent traces. The same specification can score completed traces, gate tool calls before they
 run (what this plugin does), or serve as a reward for fine-tuning.

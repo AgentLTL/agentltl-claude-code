@@ -39,7 +39,7 @@ Run these in the shell. Use the HTTPS URL: the `owner/repo` short form clones ov
 fails on machines without GitHub SSH keys.
 
 ```bash
-claude plugin marketplace add https://github.com/lailanelkoussy/agentltl-claude-code.git
+claude plugin marketplace add https://github.com/AgentLTL/agentltl-claude-code.git
 claude plugin install agentltl@agentltl
 ```
 
@@ -55,7 +55,7 @@ back without changing anything else. The entry should end up like this:
 ```json
 "extraKnownMarketplaces": {
   "agentltl": {
-    "source": {"source": "git", "url": "https://github.com/lailanelkoussy/agentltl-claude-code.git"},
+    "source": {"source": "git", "url": "https://github.com/AgentLTL/agentltl-claude-code.git"},
     "autoUpdate": true
   }
 }
