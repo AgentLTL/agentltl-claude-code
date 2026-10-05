@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# AgentLTL in Claude Code's status line, written by `agentltl statusline --install`.
+# Runs the plugin version Claude Code has installed now, so plugin updates don't break it;
+# falls back to the copy that installed it. Reads Claude Code's status-line JSON on stdin.
+fallback="__AGENTLTL_ROOT__"
+root="$(python3 -c '
+import json, os
+try:
+    with open(os.path.expanduser("~/.claude/plugins/installed_plugins.json")) as fh:
+        entries = json.load(fh)["plugins"]["agentltl@agentltl"]
+    print(next(e["installPath"] for e in entries if os.path.isdir(e.get("installPath", ""))))
+except Exception:
+    pass
+' 2>/dev/null)"
+[[ -x "$root/bin/agentltl" ]] || root="$fallback"
+exec "$root/bin/agentltl" statusline

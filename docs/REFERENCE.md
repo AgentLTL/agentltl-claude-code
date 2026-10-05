@@ -316,9 +316,21 @@ agentltl use|unuse NAME... [--user] switch packaged rules on or off (use: --mode
 agentltl disable|enable ID... [--user]  switch single rules off, or back on
 agentltl memory scan [--all] [--user]   statements in CLAUDE.md and memory that may be rules
 agentltl memory decline|forget ID...    stop proposing a statement (forget: undo)
+agentltl statusline --install [--force] show the rules in force in Claude Code's status line
+agentltl statusline --uninstall         remove it again
 ```
 
 `/agentltl:status` shows the guard's status.
+
+Claude Code doesn't show a plugin's startup messages, and a plugin can't set the status line
+itself. So `agentltl statusline --install` sets `statusLine` in `~/.claude/settings.json` to
+a small script, `<plugin data>/statusline`, copied from `scripts/statusline`.
+- **Updates:** the script runs whichever plugin version is installed, so updates don't break it.
+- **What it shows:** `AgentLTL ● N rules · …` by mode, `○ no rules here`, or a warning when a
+  rule file has errors (then nothing is enforced).
+- **Speed:** the line is cached until a rule file changes.
+- **Your own status line:** the install never replaces one without `--force`. To combine the
+  two, pipe your script's input into the AgentLTL script.
 
 ## Limits
 

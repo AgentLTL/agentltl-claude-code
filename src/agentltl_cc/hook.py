@@ -112,10 +112,11 @@ def _pre_tool_use(verdict: Any) -> Optional[Dict[str, Any]]:
 
 
 def _session_start(ruleset: Any) -> Dict[str, Any]:
+    # Claude Code does not show a SessionStart hook's systemMessage, so the user sees the
+    # rules in force through `agentltl statusline`; this only tells Claude.
     n = len(ruleset.rules)
-    where = ", ".join(ruleset.files)
     if not ruleset.settings.announce:
-        return {"systemMessage": f"AgentLTL: {n} rule(s) from {where} (not announced)"}
+        return None
     lines = [
         f"This project enforces {n} AGENTLTL rule(s) on every tool call, shell commands "
         "included (each command line is checked as the sequence of commands it runs). "
@@ -134,7 +135,6 @@ def _session_start(ruleset: Any) -> Dict[str, Any]:
         memory = ", whole project" if r.scope == "project" else ""
         lines.append(f"- {r.id} [{r.mode}{memory}]: {r.summary}{why}")
     return {
-        "systemMessage": f"AgentLTL: {n} rule(s) from {where}",
         "hookSpecificOutput": {"hookEventName": "SessionStart",
                                "additionalContext": "\n".join(lines)},
     }
@@ -144,9 +144,9 @@ def _broken_file(event: str, problems: List[str]) -> Optional[Dict[str, Any]]:
     text = ("AGENTLTL.yaml has errors, so NO AGENTLTL rules are being enforced until it is "
             "fixed:\n" + "\n".join(f"- {p}" for p in problems))
     if event == "SessionStart":
-        return {"systemMessage": text,
-                "hookSpecificOutput": {"hookEventName": "SessionStart",
-                                       "additionalContext": text}}
+        return {"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                       "additionalContext": text + "\nTell the user at the "
+                                       "start of your first reply."}}
     if event == "PreToolUse":
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                        "additionalContext": text + "\nTell the user."}}
@@ -159,6 +159,10 @@ def _failure(event: str, exc: Exception) -> Optional[Dict[str, Any]]:
         return {"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "ask",
             "permissionDecisionReason": text + "; this call was NOT checked against the rules."}}
+    if event == "SessionStart":
+        return {"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                       "additionalContext": text + "; NO rules are enforced. "
+                                       "Tell the user at the start of your first reply."}}
     return {"systemMessage": text}
 
 

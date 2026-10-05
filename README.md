@@ -80,6 +80,16 @@ Then enable auto-update (`/plugin` → **Marketplaces** → `agentltl`) and run 
 The plugin does nothing until there is an `AGENTLTL.yaml`: at a project's root for that
 project, or in `~/.claude/` for every project.
 
+**See that it's on:** run `agentltl statusline --install`, or say yes when `/agentltl:setup`
+offers it. Claude Code's status line then shows the rules in force in the project you're in:
+
+```
+AgentLTL ● 4 rules · 2 block · 1 ask · 1 warn
+```
+
+It only adds a `statusLine` entry to `~/.claude/settings.json`, and never replaces a status
+line you already have.
+
 **Updating:** with auto-update on, new versions arrive in the background. To update now, run
 `/plugin update agentltl@agentltl`, then `/reload-plugins`.
 

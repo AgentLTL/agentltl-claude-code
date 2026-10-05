@@ -5,7 +5,12 @@
 root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # shellcheck source=../scripts/env.sh
 source "$root/scripts/env.sh"
-py="$(env_python)" || { env_build && py="$(env_python)"; }
+py="$(env_python)"
+if [[ -z "$py" && "$1" == "statusline" ]]; then
+    echo "AgentLTL ○ setting up"      # the status line must not wait for a build
+    exit 0
+fi
+[[ -n "$py" ]] || { env_build && py="$(env_python)"; }
 if [[ -z "$py" ]]; then
     echo "agentltl: the guard is not installed; run $root/scripts/setup.sh" >&2
     exit 1

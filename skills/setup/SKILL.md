@@ -57,7 +57,19 @@ Arguments: `$ARGUMENTS` (`--user` means rules for every project, in `~/.claude/A
    [the import skill](${CLAUDE_PLUGIN_ROOT}/skills/import/SKILL.md) from its step 2, reusing
    that scan. Instructions already in memory then become rules that are enforced.
 
-8. **Offer custom rules**: for anything the library and memory don't cover, use the
+8. **Offer the status line**, once per machine. Claude Code shows nothing a plugin prints at
+   startup, so the status line is where the user sees that AgentLTL is on:
+   `AgentLTL ● 4 rules · 2 block · 1 ask · 1 warn`. Check `~/.claude/settings.json`:
+   - It has no `statusLine`: ask "Show AgentLTL and the number of rules in force in the
+     status line?" If yes, run `agentltl statusline --install`. It changes only that key.
+   - It already shows AgentLTL: say so and skip this step.
+   - It has another status line: don't replace it. Show the line the install prints, which
+     adds AgentLTL's line to the user's own script, and replace it with `--force` only if
+     the user asks.
+
+   The line appears on the next prompt; no restart is needed.
+
+9. **Offer custom rules**: for anything the library and memory don't cover, use the
    `/agentltl:rules` skill to write a rule from the user's own words.
 
 Changes apply from the next tool call. No restart is needed.

@@ -81,14 +81,15 @@ def test_session_start_reminds_claude_of_the_rules(project):
     context = out["hookSpecificOutput"]["additionalContext"]
     assert "tests-before-push [block]" in context and "CI is slow." in context
     assert "memory-first [warn]: before you save anything to memory" in context
-    assert "3 rule(s)" in out["systemMessage"]
+    assert "3 AGENTLTL rule(s)" in context and "systemMessage" not in out
 
 
 def test_broken_file_is_loud(project):
     (project / "AGENTLTL.yaml").write_text("rules: [{id: x}]")
     out = pre(project, *bash("ls"))
     assert "NO AGENTLTL rules are being enforced" in out["additionalContext"]
-    assert "systemMessage" in event(project, "SessionStart")
+    start = event(project, "SessionStart")["hookSpecificOutput"]["additionalContext"]
+    assert "NO AGENTLTL rules" in start and "Tell the user" in start
 
 
 def test_no_rule_file_is_silent(tmp_path):

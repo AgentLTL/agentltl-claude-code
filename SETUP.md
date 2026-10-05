@@ -112,7 +112,8 @@ Tell the user:
 4. **Add or remove rules in plain words:** `/agentltl:rules never touch the
    lockfile`, or "remove the rule about force-pushing", or just ask Claude.
 5. **See what it is doing:** `/agentltl:status` shows the rules in force and
-   what the guard recently blocked.
+   what the guard recently blocked. If they turned on the status line in step 6, it shows
+   the number of rules in force all the time.
 
 ## Troubleshooting
 

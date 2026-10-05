@@ -13,6 +13,7 @@ agentltl_cc/cli.py – the ``agentltl`` command.
     agentltl disable ID...               switch single rules off by id (enable: back on)
     agentltl memory scan [FILE...]       statements in CLAUDE.md and memory that could be rules
     agentltl memory decline ID...        don't propose these statements again (forget: undo)
+    agentltl statusline [--install]      the status line (reads Claude Code's JSON on stdin)
 
 ``use``/``unuse``/``disable``/``enable`` edit the project's AGENTLTL.yaml (created if
 missing), or ``~/.claude/AGENTLTL.yaml`` with ``--user``.
@@ -99,6 +100,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             p.add_argument("--mode", choices=list(MODES), help="override the packs' modes")
             p.add_argument("--from", dest="origin", metavar="ID", action="append",
                            help="the memory statement this enforces (see `agentltl memory scan`)")
+
+    p = sub.add_parser("statusline", help="AgentLTL's status line for Claude Code")
+    p.add_argument("--install", action="store_true",
+                   help="show it in Claude Code's status line (edits ~/.claude/settings.json)")
+    p.add_argument("--force", action="store_true", help="with --install: replace a status line")
+    p.add_argument("--uninstall", action="store_true", help="remove AgentLTL's status line")
 
     p = sub.add_parser("memory", help="find the rules in CLAUDE.md and Claude's memory")
     msub = p.add_subparsers(dest="memory_cmd", required=True)
@@ -403,6 +410,28 @@ def _from(ids: Optional[List[str]]) -> Any:
     return ids[0] if len(ids) == 1 else list(ids)
 
 
+def _statusline(args: argparse.Namespace) -> int:
+    from . import statusline
+    from .rules import LIBRARY_DIR
+
+    if args.install or args.uninstall:
+        if args.install:
+            ok, message = statusline.install(os.path.dirname(LIBRARY_DIR), force=args.force)
+        else:
+            ok, message = statusline.uninstall()
+        print(message, file=sys.stdout if ok else sys.stderr)
+        return 0 if ok else 1
+    try:
+        payload = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
+    except ValueError:
+        payload = {}
+    try:
+        print(statusline.line(payload if isinstance(payload, dict) else {}))
+    except Exception as exc:          # a status line must print something, never a traceback
+        print(f"AgentLTL ⚠ {type(exc).__name__}")
+    return 0
+
+
 def _memory(args: argparse.Namespace) -> int:
     from . import memory
 
@@ -448,7 +477,7 @@ def _memory(args: argparse.Namespace) -> int:
 _COMMANDS = {"validate": _validate, "check": _check, "translate": _translate, "tools": _tools,
              "trace": _trace, "reset": _reset, "library": _library, "use": _edit_list,
              "unuse": _edit_list, "disable": _edit_list, "enable": _edit_list,
-             "memory": _memory}
+             "memory": _memory, "statusline": _statusline}
 
 __all__ = ["main", "MODE_HELP"]
 
