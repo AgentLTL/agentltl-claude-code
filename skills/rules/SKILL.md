@@ -125,5 +125,9 @@ ask for the change.
 If you came here instead of saving a memory, don't also save the rule to memory: the rule
 is listed to Claude at every session start. Save to memory only the parts no rule can check.
 
+For instructions that are already in CLAUDE.md or memory, the
+[import skill](${CLAUDE_PLUGIN_ROOT}/skills/import/SKILL.md) (`/agentltl:import`) finds them
+all and converts them in one pass.
+
 Rules apply from the next tool call; no restart is needed. A broken file disables ALL rules,
 so always validate after editing.

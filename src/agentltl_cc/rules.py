@@ -15,6 +15,7 @@ agentltl_cc/rules.py – AGENTLTL.yaml → AgentLTL constraints.
         why: CI is slow; run the tests locally first.
         fix: Run pytest, then push.
         mode: warn
+        from: {file: CLAUDE.md, line: 12, id: 3f2a9c01d4}   # optional: the memory it came from
     use: [no-force-push, {tests-before-push: {mode: warn}}]   # packaged rules, see library/
     disable: [memory-first]     # switch off rules by id (from use:, ~/.claude, or built in)
     tools:                      # cli-to-tools specs for your own commands
@@ -85,7 +86,8 @@ STRENGTH = ("stop", "block", "ask", "retry", "warn", "log")
 UNPARSEABLE = ("ask", "note", "allow", "deny")
 SCOPES = ("session", "project")
 KINDS = ("never", "before", "require", "at_most", "ltl", "formula")
-_RULE_KEYS = {"id", "why", "fix", "mode", "scope", "with", "where", *KINDS}
+_RULE_KEYS = {"id", "why", "fix", "mode", "scope", "with", "where", "from", *KINDS}
+_FROM_KEYS = {"file", "line", "id", "text"}
 
 
 @dataclass
@@ -112,6 +114,7 @@ class Rule:
     source: str = ""
     targets: Tuple[Any, ...] = ()
     scope: str = "session"
+    origins: Tuple[Dict[str, Any], ...] = ()   # `from:` the memory statements it enforces
 
     @property
     def summary(self) -> str:
@@ -350,8 +353,9 @@ def _use(raw: Any, settings: Settings, paths: Paths) -> Tuple[List[Rule], Dict[s
     for item in raw:
         name, extra = (item, {}) if isinstance(item, str) else (
             next(iter(item.items())) if isinstance(item, dict) and len(item) == 1 else (None, None))
-        if name is None or not isinstance(extra, dict) or set(extra) - {"mode", "scope"}:
-            raise RuleError(f"{item!r}: expected a name, or {{name: {{mode: ..., scope: ...}}}}")
+        if name is None or not isinstance(extra, dict) or set(extra) - {"mode", "scope", "from"}:
+            raise RuleError(f"{item!r}: expected a name, or "
+                            "{name: {mode: ..., scope: ..., from: ...}}")
         if name not in packs:
             import difflib
             close = difflib.get_close_matches(name, packs, n=1)
@@ -484,10 +488,29 @@ def compile_rule(raw: Any, settings: Settings, paths: Paths, where: str = "rule"
     scope = _scope(raw.get("scope", settings.scope))
     why = str(raw.get("why") or "").strip()
     fix = str(raw.get("fix") or "").strip()
+    origins = _origins(raw.get("from"), rule_id)
     formula, tools, *targets = _BUILDERS[kind](raw, paths, f"{rule_id}.{kind}")
     if kind in ("ltl", "formula"):
         _require_runtime_safe(formula, rule_id)
-    return Rule(rule_id, kind, why, fix, mode, formula, tools, where, tuple(targets), scope)
+    return Rule(rule_id, kind, why, fix, mode, formula, tools, where, tuple(targets), scope,
+                origins)
+
+
+def _origins(raw: Any, rule_id: str) -> Tuple[Dict[str, Any], ...]:
+    """``from:``: the memory statement(s) a rule was written from (see ``agentltl memory``).
+    A statement id alone, a mapping with file/line/id/text, or a list of these."""
+    if raw is None:
+        return ()
+    items = raw if isinstance(raw, list) else [raw]
+    out = []
+    for item in items:
+        if isinstance(item, str):
+            item = {"id": item}
+        if not isinstance(item, dict) or not item or set(item) - _FROM_KEYS:
+            raise RuleError(f"rule '{rule_id}': 'from' takes a statement id, or a mapping with "
+                            f"{', '.join(sorted(_FROM_KEYS))}")
+        out.append(item)
+    return tuple(out)
 
 
 def _predicate(fn: Callable[[List[Any]], Optional[str]], label: str) -> Any:

@@ -193,6 +193,32 @@ rule can get forgotten. So the plugin adds one built-in rule, `memory-first` (mo
 replaces it, for example with `mode: log` to remind Claude without refusing. Memory you add
 yourself (the `#` shortcut, editing the file) is never checked.
 
+`memory-first` catches new memories. **`/agentltl:import`** handles the ones already
+written. It is also offered by `/agentltl:setup`.
+
+1. **`agentltl memory scan`** reads the memory that applies in the project:
+   - `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, and nested `CLAUDE.md` files
+     outside dependencies and submodules;
+   - `.claude/rules/`, `AGENTS.md`, `.cursorrules`, and the project's auto memory;
+   - the user's `~/.claude/CLAUDE.md` and `~/.claude/rules/`.
+
+   It splits them into statements: one per bullet, paragraph or table row, and one per
+   auto-memory file. Each statement gets an id taken from its text, so it is stable
+   across edits elsewhere in the file. The scan keeps the ones phrased as instructions
+   about actions. It translates the commands they quote, and flags the ones with no spec
+   (`needs_spec`).
+2. **Claude sorts them:**
+   - `library`: a packaged rule already does it;
+   - `rule`;
+   - `partial`: part of it can be checked;
+   - `not-a-rule`: facts, code style, plans and judgment.
+3. **Claude drafts each rule** with the mode its wording supports, never a stricter one,
+   and tests it with `agentltl check` on cases taken from the statement.
+4. **You tick the rules to keep.** Each rule records its statement with `from:`. A packaged
+   one records it as `use: [{name: {from: ID}}]`.
+5. **Unticked statements** are remembered with `agentltl memory decline`, so the next scan
+   shows only what's new. The memory itself is left as it is, unless you ask.
+
 ### Secret leak alerts
 
 The `PostToolUse` hook scans each call's output for well-known credential formats (see
@@ -288,6 +314,8 @@ agentltl reset [--project]          forget the session's (or the project's) memo
 agentltl library [NAME]             the packaged rules (or one in full)
 agentltl use|unuse NAME... [--user] switch packaged rules on or off (use: --mode M)
 agentltl disable|enable ID... [--user]  switch single rules off, or back on
+agentltl memory scan [--all] [--user]   statements in CLAUDE.md and memory that may be rules
+agentltl memory decline|forget ID...    stop proposing a statement (forget: undo)
 ```
 
 `/agentltl:status` shows the guard's status.

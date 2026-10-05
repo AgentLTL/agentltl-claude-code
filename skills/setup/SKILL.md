@@ -51,7 +51,13 @@ Arguments: `$ARGUMENTS` (`--user` means rules for every project, in `~/.claude/A
      differently, offer to write a project rule with the same id: it replaces the packaged one.
    - `agentltl library NAME` shows a rule's YAML in full.
 
-7. **Offer custom rules**: for anything the library doesn't cover, use the `/agentltl:rules`
-   skill to write a rule from the user's own words.
+7. **Offer to scan memory**: run `agentltl memory scan --json`. If its
+   `counts.candidates` is above 0, offer "Scan CLAUDE.md and memory for rules
+   (N statements in M files)". If the user accepts, follow
+   [the import skill](${CLAUDE_PLUGIN_ROOT}/skills/import/SKILL.md) from its step 2, reusing
+   that scan. Instructions already in memory then become rules that are enforced.
+
+8. **Offer custom rules**: for anything the library and memory don't cover, use the
+   `/agentltl:rules` skill to write a rule from the user's own words.
 
 Changes apply from the next tool call. No restart is needed.

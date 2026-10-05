@@ -11,6 +11,8 @@ agentltl_cc/cli.py – the ``agentltl`` command.
     agentltl library [NAME]              packaged rules you can switch on, or one in full
     agentltl use NAME... [--mode M]      switch packaged rules on (unuse: off)
     agentltl disable ID...               switch single rules off by id (enable: back on)
+    agentltl memory scan [FILE...]       statements in CLAUDE.md and memory that could be rules
+    agentltl memory decline ID...        don't propose these statements again (forget: undo)
 
 ``use``/``unuse``/``disable``/``enable`` edit the project's AGENTLTL.yaml (created if
 missing), or ``~/.claude/AGENTLTL.yaml`` with ``--user``.
@@ -95,6 +97,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                        help="edit ~/.claude/AGENTLTL.yaml (every project) instead of this project's")
         if name == "use":
             p.add_argument("--mode", choices=list(MODES), help="override the packs' modes")
+            p.add_argument("--from", dest="origin", metavar="ID", action="append",
+                           help="the memory statement this enforces (see `agentltl memory scan`)")
+
+    p = sub.add_parser("memory", help="find the rules in CLAUDE.md and Claude's memory")
+    msub = p.add_subparsers(dest="memory_cmd", required=True)
+    m = msub.add_parser("scan", help="statements that could become rules")
+    m.add_argument("files", nargs="*", help="only these files (default: the memory that "
+                   "applies here)")
+    m.add_argument("--user", action="store_true",
+                   help="the user's memory (~/.claude/CLAUDE.md, rules, home-directory sessions)")
+    m.add_argument("--all", action="store_true", help="also statements already covered or declined")
+    m.add_argument("--json", action="store_true", help="machine-readable output")
+    for name, what in (("decline", "don't propose these statements again"),
+                       ("forget", "undo `decline`")):
+        m = msub.add_parser(name, help=what)
+        m.add_argument("ids", nargs="+", metavar="ID")
 
     args = parser.parse_args(argv)
     try:
@@ -138,7 +156,9 @@ def _validate(args: argparse.Namespace) -> int:
     print(f"OK: {len(ruleset.rules)} rule(s) from {', '.join(ruleset.files)}")
     for r in ruleset.rules:
         memory = ", project memory" if r.scope == "project" else ""
-        print(f"  {r.id} [{r.mode}{memory}] ({_origin(r.source)}): {r.summary}")
+        came = "".join(f", from {o.get('file', o.get('id'))}" + (f":{o['line']}" if o.get("line") else "")
+                       for o in r.origins)
+        print(f"  {r.id} [{r.mode}{memory}] ({_origin(r.source)}{came}): {r.summary}")
         if r.why:
             print(f"      why: {r.why}")
     _warn(ruleset)
@@ -352,7 +372,8 @@ def _edit_list(args: argparse.Namespace) -> int:
                       file=sys.stderr)
             return 1
         items = [i for i in items if _use_name(i) not in args.names]
-        items += [{n: {"mode": args.mode}} if args.mode else n for n in args.names]
+        extra = {k: v for k, v in (("mode", args.mode), ("from", _from(args.origin))) if v}
+        items += [{n: dict(extra)} if extra else n for n in args.names]
     elif args.cmd == "unuse":
         items = [i for i in items if _use_name(i) not in args.names]
     elif args.cmd == "disable":
@@ -376,9 +397,58 @@ def _edit_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _from(ids: Optional[List[str]]) -> Any:
+    if not ids:
+        return None
+    return ids[0] if len(ids) == 1 else list(ids)
+
+
+def _memory(args: argparse.Namespace) -> int:
+    from . import memory
+
+    root = _here()[1]
+    if args.memory_cmd in ("decline", "forget"):
+        have = getattr(memory, args.memory_cmd)(root, args.ids)
+        print(f"Declined for {root}: {', '.join(have) or '(none)'}")
+        return 0
+    from .guard import translator_for
+    try:
+        ruleset = _ruleset([])
+    except RuleFileError:
+        ruleset = None
+    translator = translator_for(ruleset or RuleSet())
+    result = memory.scan(root, ruleset, translator, user_only=args.user, files=args.files)
+    if not args.all:
+        result["statements"] = [s for s in result["statements"]
+                                if s["status"] == "new" and s["candidate"]]
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0
+    c = result["counts"]
+    print(f"{len(result['sources'])} memory file(s), {c['statements']} statement(s): "
+          f"{c['candidates']} new that may be rules, {c['covered']} covered by a rule, "
+          f"{c['declined']} declined." + ("" if args.all else " --all lists every statement."))
+    last = None
+    for st in result["statements"]:
+        if st["file"] != last:
+            last = st["file"]
+            print(f"\n{last}  (rules go in the {st['target']} file)")
+        mark = "" if st["status"] == "new" else f" [{st['status']}]"
+        mark += "" if st["candidate"] or not args.all else " [not a candidate]"
+        text = " ⏎ ".join(line.strip() for line in st["text"].splitlines())
+        text = text if len(text) <= 110 else text[:107] + "..."
+        print(f"  {st['id']} :{st['line']}{mark} {text}")
+        for cmd in st["commands"]:
+            names = ", ".join(c["name"] for c in cmd.get("calls", []))
+            spec = f"  (no spec: {', '.join(cmd['needs_spec'])})" if cmd.get("needs_spec") else ""
+            print(f"      `{cmd['text']}` -> {names}{spec}")
+    return 0
+
+
 _COMMANDS = {"validate": _validate, "check": _check, "translate": _translate, "tools": _tools,
              "trace": _trace, "reset": _reset, "library": _library, "use": _edit_list,
-             "unuse": _edit_list, "disable": _edit_list, "enable": _edit_list}
+             "unuse": _edit_list, "disable": _edit_list, "enable": _edit_list,
+             "memory": _memory}
 
 __all__ = ["main", "MODE_HELP"]
 

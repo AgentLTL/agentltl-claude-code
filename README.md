@@ -57,7 +57,8 @@ A plain command filter can only allow or forbid `helm upgrade`. This rule also k
 - **Secret leak alerts:** when a command's output contains what looks like a credential, you
   are told which kind, so you can rotate it, and Claude is told not to repeat it.
 - **Rules instead of memory:** when Claude would save a rule to `CLAUDE.md` or its memory,
-  it writes an enforced rule in `AGENTLTL.yaml` instead.
+  it writes an enforced rule in `AGENTLTL.yaml` instead. `/agentltl:import` does the same
+  for what your memory already holds.
 - **Fail-safe:** never approves a call; internal errors become a permission prompt.
 
 ## Installation
@@ -144,7 +145,7 @@ These commands are understood out of the box:
 | Area | Commands |
 |---|---|
 | Shell and files | coreutils and text tools (`ls`, `cat`, `cp`, `mv`, `rm`, `find`, `sed`, `awk`, `grep`, ...), `printenv`/`export`/`declare`, `base64`/`strings`/`xxd`, editors and writers (`vim`, `nano`, `perl`, `dd`, `install`, `tee`, `sponge`, `patch`), archives (`tar`, `zip`, `unzip`, `7z`) |
-| Git and GitHub | `git` (including `credential`), `gh` (including `pr`, `auth`, `secret`, `gist`) |
+| Git and GitHub | `git` (including `credential`, `submodule`), `gh` (including `pr`, `auth`, `secret`, `gist`) |
 | Containers and clusters | `docker`, `docker compose`, `kubectl`, `helm` |
 | Infrastructure and cloud | `terraform`, `aws` (`s3`, `secretsmanager`, `ssm`, `iam`, `sts`, `kms`, `ecr`, `configure`), `gcloud`, `az` |
 | Secrets | `vault`, `sops`, `ansible-vault`, `gpg`, `age`, `openssl`, `op`, `bw`, `pass`, `security`, `secret-tool`, `doppler`, `heroku`, `vercel` |
@@ -236,6 +237,25 @@ It works by refusing each write to a memory file once, with a reminder. If the c
 be a rule, Claude repeats the call and it goes through. Memory you edit yourself is never
 checked. This rule is on by default; turn it off with `disable: [memory-first]`.
 
+For instructions already in memory, run `/agentltl:import`, which `/agentltl:setup` also
+offers. It reads your `CLAUDE.md` files, `.claude/rules/` and auto memory, and picks out the
+statements that are rules about tool calls. Claude drafts each rule, tests it against that
+statement's own examples, and asks you which rules to keep:
+
+```
+"git submodule update --init  # NEVER --recursive"   (CLAUDE.md:9)
+  → no-recursive-submodules  [block]  git submodule update --recursive
+
+"Do not pip-install into a host env"   (CLAUDE.md:29)
+  → no-host-pip  [warn]  pip install …   (docker compose run … pip install stays allowed)
+
+"Prefer vLLM + parallel workers over TransformersModel"
+  → not a rule: it's about code, which the guard doesn't see. It stays in memory.
+```
+
+Each rule keeps a `from:` link to its statement, so running the import again only shows
+what's new. Your memory files stay as they are unless you ask.
+
 ### Secret leak alerts
 
 A rule can only stop a call before it runs. When a program prints a credential anyway (an app
@@ -265,6 +285,7 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 |---|---|
 | `/agentltl:setup` | Pick rules from the library |
 | `/agentltl:rules <rule>` | Add, change or remove a rule in plain words |
+| `/agentltl:import` | Turn what `CLAUDE.md` and memory say into enforced rules |
 | `/agentltl:status` | Show active rules and recent blocks |
 
 ## How it works

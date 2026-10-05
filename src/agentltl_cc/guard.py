@@ -83,7 +83,7 @@ class GuardTranslator(Translator):
 
     - ``redirect_to`` / ``redirect_from``: files a redirection writes (``> f``, ``>> f``,
       ``2> f``, ``&> f``, ``cat <<EOF > f``) or reads (``< f``); ``overwrite_to``: the
-      ones that truncate the file first (``>``, ``&>``, not ``>>``);
+      ones that truncate the file first (``>``, ``&>``, not ``>>``, nor ``/dev/null``);
     - path arguments made absolute (see :func:`normalize_paths`);
     - ``unknown_paths``: the call's files are only known at run time (``xargs rm``,
       ``find -exec rm {}``, ``rm $UNSET``);
@@ -127,11 +127,19 @@ def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[s
             continue                       # 2>&1: copies a descriptor, no file
         if op in (">", ">>", ">|", "&>", "&>>", ">&"):
             writes.append(target)
-            if op in (">", ">|", "&>", ">&"):
+            if op in (">", ">|", "&>", ">&") and not _is_device(target):
                 truncates.append(target)
         elif op == "<":
             reads.append(target)
     return writes, reads, truncates
+
+
+_DEVICES = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
+
+
+def _is_device(target: str) -> bool:
+    """Writing to these discards or shows the output; it overwrites no file."""
+    return target in _DEVICES or target.startswith("/dev/fd/")
 
 
 def _patch_targets(call: ToolCall, paths: Paths) -> None:

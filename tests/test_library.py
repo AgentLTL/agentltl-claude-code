@@ -109,6 +109,13 @@ def test_read_before_overwrite(tmp_path):
                ("Write", {"file_path": "new.txt"})) == ["deny", "none", "none", "none"]
 
 
+def test_discarding_output_is_not_an_overwrite(tmp_path):
+    (tmp_path / "notes.txt").write_text("x")
+    g = guard_using("read-before-overwrite", str(tmp_path))
+    assert run(g, "ls missing 2>/dev/null", "make >/dev/null 2>&1", "echo hi > /dev/stderr",
+               "echo x > notes.txt") == ["none", "none", "none", "deny"]
+
+
 class TestUse:
     def test_mode_override_and_replacement_by_id(self):
         rs = loads("use: [{no-force-push: {mode: warn}}, ask-before-recursive-delete]\n"

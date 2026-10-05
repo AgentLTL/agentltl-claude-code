@@ -24,6 +24,9 @@ rules:
     fix: ...              # optional: what to do instead
     mode: block           # optional, see Modes
     scope: session        # optional, see Memory
+    from: {file: CLAUDE.md, line: 9, id: 674054a6cf}   # optional: the memory statement it
+                          # enforces (`agentltl memory scan` ids); `validate` shows it, and
+                          # the scan stops proposing that statement
 
 tools:                    # optional cli-to-tools specs for project commands (see below)
 ```
