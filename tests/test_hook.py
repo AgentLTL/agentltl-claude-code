@@ -64,10 +64,24 @@ def test_scenario(project):
     assert trace == ["pytest", "Edit"]
 
 
-def test_stop_halts_claude(project):
+def test_stop_lets_claude_explain_but_not_act_until_the_user_replies(project):
     out = event(project, "PreToolUse", "Read", {"file_path": str(project / ".env")})
-    assert out["continue"] is False
+    assert "continue" not in out                      # Claude keeps its turn, to explain
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no-secrets" in out["systemMessage"] and "until you reply" in out["systemMessage"]
+    locked = pre(project, *bash("ls"))                # any call, even a harmless one
+    assert locked["permissionDecision"] == "deny"
+    assert "stopped this session" in locked["permissionDecisionReason"]
+    assert event(project, "UserPromptSubmit", prompt="ok, go on") is None
+    assert pre(project, *bash("ls")) is None
+
+
+def test_a_possible_match_refuses_without_stopping(project):
+    out = event(project, "PreToolUse", "Bash", {"command": 'f=$(ls); cat "$f"'})
+    spec = out["hookSpecificOutput"]
+    assert spec["permissionDecision"] == "deny" and "systemMessage" not in out
+    assert "name them explicitly" in spec["permissionDecisionReason"]
+    assert pre(project, *bash("ls")) is None          # not locked
 
 
 def test_unparseable_in_each_mode(project):

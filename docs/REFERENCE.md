@@ -133,6 +133,7 @@ Ask Claude ("add a rule that we never push to main"), or run
 | `SessionStart` | Lists the rules to Claude, including after compaction (`settings.announce: false` turns this off). Reports errors in the rule file. |
 | `PreToolUse` | Translates the call and checks it against what has already run. Breaking a rule gives deny, ask, or deny-and-stop, depending on the rule's mode. Otherwise the hook says nothing, and Claude Code's normal permissions (your settings, auto mode) decide. |
 | `PostToolUse` | Records the call that ran. Calls that were denied, or that you refused, never count. |
+| `UserPromptSubmit` | Lifts a `stop`: after a `stop` rule fires, every tool call is refused until you reply, so Claude can explain what it was doing but not act. |
 
 How calls are translated:
 
@@ -170,7 +171,7 @@ other already has history.
 | `warn` | BLOCK_AND_WARN | Denied once. Claude may override by repeating the exact call. |
 | `retry` | SOFT_BLOCK | Denied. The `settings.retries`-th try (default: the third) asks you. |
 | `ask` | PERSISTENT_BLOCK | You get a permission prompt saying which rule the call breaks and why; you approve or refuse. Claude cannot override it. In `claude -p` (no one to ask) it is denied. |
-| `stop` | HARD_STOP | Denied, and Claude stops. |
+| `stop` | HARD_STOP | Denied, and every tool call is refused until the user replies. Claude keeps its turn, to explain what it was doing. A match that is only possible (files known at run time) is refused without stopping. |
 | `log` | TOLERATE | Allowed. Claude is told it broke the rule. |
 
 When one call breaks several rules, the strongest mode decides. This also stops a `warn`

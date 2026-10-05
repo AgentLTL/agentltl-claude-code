@@ -7,6 +7,9 @@
     "PreToolUse": [
       {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PreToolUse", "timeout": 120}]}
     ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run UserPromptSubmit", "timeout": 60}]}
+    ],
     "PostToolUse": [
       {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PostToolUse", "timeout": 120}]}
     ]

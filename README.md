@@ -287,7 +287,7 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 | `warn` | Refused once; Claude may repeat the exact call to override |
 | `ask` | You're asked to approve it; Claude can't override |
 | `retry` | Refused twice; the third try asks you (`settings.retries`) |
-| `stop` | Refused, and Claude stops |
+| `stop` | Refused, and no tool runs until you reply; Claude tells you what it was doing |
 | `log` | Allowed; Claude is told it broke the rule |
 
 ### Commands
@@ -301,8 +301,9 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 
 ## How it works
 
-Three Claude Code hooks: `SessionStart` lists the rules to Claude (again after compaction),
-`PreToolUse` checks each call against the rules and the call history, and `PostToolUse` records
+Four Claude Code hooks: `SessionStart` lists the rules to Claude (again after compaction),
+`PreToolUse` checks each call against the rules and the call history, `UserPromptSubmit` lifts
+a `stop` when you reply, and `PostToolUse` records
 calls that ran. Shell commands are parsed by [cli-to-tools](https://github.com/AgentLTL/cli-to-tools);
 rules are evaluated by [AgentLTL](https://github.com/AgentLTL/AgentLTL) (linear temporal logic).
 

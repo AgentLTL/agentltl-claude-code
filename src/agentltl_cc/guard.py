@@ -32,7 +32,7 @@ from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
 from .match import PATH_KEYS, UNKNOWN_PATHS, Paths, normalize_paths, unknown_path_keys
-from .rules import MODES, SCOPES, Rule, RuleSet
+from .rules import _MAYBE, MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
 AUTO_MODES = ("auto", "bypassPermissions", "dontAsk")
@@ -55,9 +55,15 @@ _TAILS = {
             "repeating exactly the same call as your next action; otherwise comply.",
     "retry": "Change your approach to satisfy the rule. If you keep getting blocked, the user "
              "will be asked to decide.",
-    "stop": "This rule stops the session. Stop working and tell the user what you were trying "
-            "to do and why.",
+    "stop": "This rule stops the session: every tool call is refused until the user replies. "
+            "Don't try another command. Tell the user what you were trying to do and why, then "
+            "end your turn.",
 }
+# A `stop` rule that only *may* match (a file known at run time) refuses the call instead.
+_MAYBE_STOP = ("This rule stops the session when it is broken. This call was refused because its "
+               "files can't be known in advance: run the command that finds them first, then "
+               "name them explicitly. If one of them is a file this rule protects, don't touch "
+               "it: tell the user.")
 # Told to Claude alongside a prompt the user answers (mode: ask, or retry escalating).
 _ASKED = ("AGENTLTL rule '{name}' asked the user to approve this call. If they decline, do not "
           "retry it or work around the rule; ask the user what they want instead.")
@@ -447,6 +453,12 @@ class Guard:
                     f"Claude was refused {attempts - 1} time(s) by this rule and is trying again."))
                 return Verdict("ask", reason, context=_ASKED.format(name=exc.constraint_name),
                                rule=exc.constraint_name, calls=shown)
+            if _MAYBE in detail:
+                # Only a possible match (a file known at run time): refuse the call, but don't
+                # stop the session over what naming the files would settle.
+                reason = self._message(rule, exc.constraint_name, detail, segment, mode="block",
+                                       tail=_MAYBE_STOP)
+                return Verdict("deny", reason, rule=exc.constraint_name, calls=shown)
             reason = self._message(rule, exc.constraint_name, detail, segment, mode="stop")
             return Verdict("stop", reason, rule=exc.constraint_name, calls=shown)
 

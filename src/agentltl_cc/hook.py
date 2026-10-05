@@ -4,6 +4,8 @@ event JSON on stdin and prints the hook's JSON answer.
 
     SessionStart   remind Claude of the rules (also after a compaction); report file errors
     PreToolUse     deny / ask / stop when a call breaks a rule, else stay silent
+    UserPromptSubmit  lift a stop: after a `stop` rule fires, every tool call is refused until
+                   the user replies, so Claude can explain but not act
     PostToolUse    add the call that ran to the session and project traces; warn when its
                    output contains a credential (settings.scan_output)
 
@@ -52,10 +54,15 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
     logging.getLogger("agentltl").setLevel(logging.ERROR)
     logging.getLogger("cli_to_tools").setLevel(logging.ERROR)
     from . import store
-    from .guard import Guard, is_auto
+    from .guard import Guard, Verdict, is_auto
     from .match import Paths
     from .rules import RuleFileError, load
 
+    sid = payload.get("session_id") or "default"
+    if event == "UserPromptSubmit":          # the user replied: lift a stop, even if the rule
+        with store.locked(sid) as state:     # file has since become unreadable
+            state.pop("stopped", None)
+        return None
     try:
         ruleset = load(files, Paths(cwd, project))
     except RuleFileError as exc:
@@ -66,7 +73,6 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
     if event not in ("PreToolUse", "PostToolUse"):
         return None
 
-    sid = payload.get("session_id") or "default"
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     guard = Guard(ruleset, Paths(cwd, project))
     with store.locked(sid) as state, store.locked_project(project) as project_state:
@@ -75,8 +81,13 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
             guard.record(tool, tool_input, payload.get("tool_use_id", ""),
                          payload.get("tool_response"))
             verdict = None
+        elif state.get("stopped"):
+            verdict = Verdict("deny", _STILL_STOPPED.format(**state["stopped"]),
+                              rule=state["stopped"].get("rule"))
         else:
             verdict = guard.decide(tool, tool_input, auto=is_auto(payload.get("permission_mode")))
+            if verdict.action == "stop":
+                state["stopped"] = {"rule": verdict.rule or "?"}
         state.update(guard.dump())
         state["project_dir"] = project
         project_state.update(guard.dump_project())
@@ -87,6 +98,12 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
     if event == "PostToolUse":
         return _scan(ruleset, tool, payload.get("tool_response"))
     return None if verdict is None else _pre_tool_use(verdict)
+
+
+_STILL_STOPPED = (
+    "[AGENTLTL] Rule '{rule}' stopped this session: every tool call is refused until the user "
+    "replies. Nothing was executed. Don't try another command or a workaround. Tell the user "
+    "what you were trying to do, why, and what you need from them, then end your turn.")
 
 
 def _scan(ruleset: Any, tool: str, response: Any) -> Optional[Dict[str, Any]]:
@@ -104,8 +121,11 @@ def _pre_tool_use(verdict: Any) -> Optional[Dict[str, Any]]:
         spec["permissionDecision"] = "ask" if verdict.action == "ask" else "deny"
         spec["permissionDecisionReason"] = verdict.reason
     if verdict.action == "stop":
-        out["continue"] = False
-        out["stopReason"] = f"AGENTLTL rule '{verdict.rule}' stopped the session."
+        # Not `continue: false`: that would end Claude's turn before it could explain. Claude
+        # keeps the turn to tell the user what it was doing; every tool call is refused until
+        # the user replies (see UserPromptSubmit).
+        out["systemMessage"] = (f"AgentLTL: rule '{verdict.rule}' stopped Claude. It can explain, "
+                                "but no tool runs until you reply.")
     if verdict.context:
         spec["additionalContext"] = verdict.context
     return out if len(spec) > 1 or "continue" in out else None

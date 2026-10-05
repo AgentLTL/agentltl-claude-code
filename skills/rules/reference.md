@@ -147,7 +147,7 @@ user says "ever", "already", "once per project" or "in any session", that is `pr
 | `warn` | denied once, with the reason | Claude, by repeating the exact same call next |
 | `retry` | denied; the `retries`-th try (default: the third) asks the user | the user, after the retries |
 | `ask` | the user gets a permission prompt with the reason | the user |
-| `stop` | denied and Claude stops working | the user |
+| `stop` | denied, and no tool runs until the user replies (Claude explains); a possible match (files known at run time) is only denied | the user |
 | `log` | allowed; Claude is told it broke the rule | n/a |
 
 When one call breaks several rules, the strongest mode decides (stop > block > ask > retry >
