@@ -370,13 +370,17 @@ This cuts both ways:
   `find -exec … {}`, an unset `$VARIABLE`), path rules treat the call as a possible match
   instead of letting it through. An unknown `$VARIABLE` only makes its own argument
   uncertain: `cd $X` is not a possible write to `.env`, but `echo x > $F` is.
+- **`cd` within a command line is followed:** `cd migrations && rm 001.sql` is checked as
+  `<project>/migrations/001.sql`.
+  - A `cd` lasts until the end of its subshell (`( … )`, `bash -c`).
+  - A `cd` inside a pipeline changes nothing, because each part runs in its own subshell.
+  - After a `cd` to a directory only known at run time (`cd $D`, `cd -`, `popd`), relative
+    paths are unknown too.
+  - A `cd` in an earlier, separate command counts as well, because Claude Code passes the new
+    directory to the next call.
 
 ### To do
 
-- **Follow `cd` inside a command line.** Relative paths are resolved against the session's
-  working directory. A `cd` earlier in the same command line is not followed, so
-  `cd migrations && rm 001.sql` is checked as `<project>/001.sql`. A `cd` in an earlier,
-  separate command does count, because Claude Code passes the new directory to the next call.
 - **Judge `exists` against the disk as it was.** `exists` is checked on disk when the call is
   made, which is right for the call being checked. Rules that look back at earlier calls
   (`before`, `at_most`) re-judge those calls against the disk as it is now. A file created and

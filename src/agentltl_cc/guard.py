@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 from cli_to_tools import SpecRegistry, ToolCall, TranslationError, Translator
 from cli_to_tools.agentltl import CliConstraintEnforcer
 
-from .match import UNKNOWN_PATHS, Paths, normalize_paths, unknown_path_keys
+from .match import PATH_KEYS, UNKNOWN_PATHS, Paths, normalize_paths, unknown_path_keys
 from .rules import MODES, SCOPES, Rule, RuleSet
 
 SHELL_TOOLS = {"Bash": "command"}
@@ -89,12 +89,37 @@ class GuardTranslator(Translator):
       ``find -exec rm {}``, ``rm $UNSET``);
     - for ``patch`` / ``git apply``, the files the diff modifies, as ``paths``;
     - for ``curl -O``, the file it writes, as ``output``.
+
+    Relative paths are resolved from the directory the command line has moved to: in
+    ``cd sub && rm a``, ``a`` is ``sub/a``. A ``cd`` lasts until the end of its subshell (or
+    ``bash -c``), and one in a pipeline changes nothing (each part runs in a subshell). After a
+    ``cd`` to a directory only known at run time (``cd $D``, ``cd -``, ``popd``), relative paths
+    are unknown too.
     """
 
     paths: Optional[Paths] = None
 
+    def translate(self, command: str) -> List[ToolCall]:
+        self._dirs: Dict[int, Optional[str]] = {}    # depth -> directory (None: unknown)
+        return super().translate(command)
+
     def _call(self, node: Any, command: str, call_id: str, index: int) -> ToolCall:
         call = super()._call(node, command, call_id, index)
+        if self.paths is None:
+            return self._finish(call, node, self.paths, False)
+        dirs = getattr(self, "_dirs", {})
+        depth = getattr(node, "depth", 0) or 0
+        for d in [d for d in dirs if d > depth]:
+            del dirs[d]                                 # left that subshell
+        here = dirs[max(dirs)] if dirs else self.paths.cwd
+        paths = Paths(here or self.paths.cwd, self.paths.root)
+        call = self._finish(call, node, paths, here is None)
+        if call.name in ("cd", "pushd", "popd") and not node.pipeline:
+            dirs[depth] = _cd_target(call, here)
+        return call
+
+    def _finish(self, call: ToolCall, node: Any, paths: Optional[Paths],
+                lost: bool) -> ToolCall:
         writes, reads, truncates = _redirect_files(node.redirects)
         if writes:
             call.args["redirect_to"] = writes
@@ -102,17 +127,56 @@ class GuardTranslator(Translator):
             call.args["overwrite_to"] = truncates
         if reads:
             call.args["redirect_from"] = reads
-        if self.paths is not None:
+        if paths is not None:
+            relative = _relative_path_keys(call.args) if lost else []
             if call.name in ("patch", "git_apply"):
-                _patch_targets(call, self.paths)
+                _patch_targets(call, paths)
             if call.name == "curl" and call.args.get("remote_name") and not call.args.get("output"):
                 _curl_output(call)
-            call.args = normalize_paths(call.args, self.paths)
+            call.args = normalize_paths(call.args, paths)
+        else:
+            relative = []
         if node.wrapper == "xargs":
             call.args[UNKNOWN_PATHS] = True
-        elif not call.args.get(UNKNOWN_PATHS) and unknown_path_keys(call.args):
-            call.args[UNKNOWN_PATHS] = unknown_path_keys(call.args)
+        elif not call.args.get(UNKNOWN_PATHS):
+            unknown = list(dict.fromkeys(unknown_path_keys(call.args) + relative))
+            if unknown:
+                call.args[UNKNOWN_PATHS] = unknown
         return call
+
+
+def _cd_target(call: ToolCall, here: Optional[str]) -> Optional[str]:
+    """The directory a ``cd`` / ``pushd`` / ``popd`` call moves to; None when only known at
+    run time."""
+    if call.name == "popd":
+        return None
+    if call.name == "pushd":
+        words = [w for w in call.args.get("argv") or [] if not w.startswith("-")]
+        target = words[0] if words else None
+        if target is None or target.startswith("+"):
+            return None                     # swaps with the directory stack
+    else:
+        target = call.args.get("path")
+        if not target:
+            return os.path.expanduser("~")
+    if target == "-" or call.args.get(UNKNOWN_PATHS) or "$" in target or "`" in target:
+        return None
+    target = os.path.expanduser(target)
+    if os.path.isabs(target):
+        return os.path.normpath(target)
+    return None if here is None else os.path.normpath(os.path.join(here, target))
+
+
+def _relative_path_keys(args: Dict[str, Any]) -> List[str]:
+    """Path arguments holding a relative path: unknown after a ``cd $D``."""
+    keys = []
+    for key in PATH_KEYS:
+        value = args.get(key)
+        values = value if isinstance(value, list) else [value]
+        if any(isinstance(v, str) and v and not v.startswith(("/", "~", "$", "-"))
+               and "://" not in v for v in values):
+            keys.append(key)
+    return keys
 
 
 def _redirect_files(redirects: List[Dict[str, str]]) -> "tuple[List[str], List[str], List[str]]":

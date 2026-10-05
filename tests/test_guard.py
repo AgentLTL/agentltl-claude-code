@@ -176,6 +176,26 @@ class TestWriteTargets:
         g = guard_for("rules: [{id: r, require: {tool: rm, where: {paths: 'build/**'}}}]")
         assert run(g, "rm build/a", "ls | xargs rm", "F=build/b; rm $F") == ["none", "deny", "none"]
 
+    def test_cd_moves_where_relative_paths_point(self):
+        g = guard_for("rules: [{id: r, never: {tool: rm, where: {paths: '/proj/secrets/*'}}}]")
+        assert run(g, "cd secrets && rm key", "cd /proj/secrets; rm key", "rm secrets/key",
+                   "cd secrets; cd ..; rm key", "cd docs && rm key", "rm key") == [
+            "deny", "deny", "deny", "none", "none", "none"]
+
+    def test_a_cd_ends_with_its_subshell_and_does_nothing_in_a_pipeline(self):
+        g = guard_for("rules: [{id: r, never: {tool: rm, where: {paths: '/proj/secrets/*'}}}]")
+        assert run(g, "(cd secrets; rm key)", "(cd secrets; ls); rm key",
+                   'bash -c "cd secrets && rm key"', 'bash -c "cd secrets"; rm key',
+                   "cd secrets | rm key", "pushd secrets && rm key && popd") == [
+            "deny", "none", "deny", "none", "none", "deny"]
+
+    def test_after_a_cd_to_an_unknown_directory_relative_paths_are_unknown(self):
+        g = guard_for("rules: [{id: r, never: {tool: rm, where: {paths: '/proj/secrets/*'}}}]")
+        v = g.decide("Bash", {"command": "cd $D && rm key"})
+        assert v.action == "deny" and "only known at run time" in v.reason
+        assert run(g, "cd - && rm key", "popd; rm key", "cd $D && rm /tmp/key") == [
+            "deny", "deny", "none"]
+
     def test_resolved_variables_and_home(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         g = guard_for("rules: [{id: r, never: {tool: rm, where: {paths: '**/secrets/*'}}}]")

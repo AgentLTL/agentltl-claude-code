@@ -258,5 +258,6 @@ How the spec format works:
   or one you refused, never counts toward `before`.
 - **Session memory starts empty in each new session.** Use `scope: project` when the rule
   should remember earlier sessions.
-- **`cd` inside a command line is not followed** (to do), and **`exists` re-judges earlier calls
-  against the disk as it is now** (to do). Mention them when a rule depends on either.
+- **`exists` re-judges earlier calls against the disk as it is now** (to do). Mention it when
+  a rule depends on it. (`cd` within a command line is followed: `cd sub && rm a` is
+  `sub/a`.)
