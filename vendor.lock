@@ -1,5 +1,7 @@
 # Pinned dependencies: <package> <git url> <commit>. Must match the vendor/ submodules
 # (tests/test_packaging.py checks it). Used by scripts/setup.sh when vendor/ is empty,
 # which is the case for a plugin installed from a marketplace (no submodules there).
-agentltl https://github.com/AgentLTL/AgentLTL.git 0204885607105e8059a0ba37bff15000182c7b04
-cli-to-tools https://github.com/AgentLTL/cli-to-tools.git e1d064ea16a997c7928eb47ee3b0861310bde6f4
+# Installed in this order: agentltl-coding needs the two before it.
+agentltl https://github.com/AgentLTL/AgentLTL.git 7a69337e15ccd4e12e92ce7a0ae969736fc7660c
+cli-to-tools https://github.com/AgentLTL/cli-to-tools.git 821de0db334d9bc09713428d3feda6792031895b
+agentltl-coding https://github.com/AgentLTL/agentltl-coding.git 9562a49f4ea29314975e1b0850cb81a88d4d94b3

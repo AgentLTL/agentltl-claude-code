@@ -3,7 +3,7 @@
 import pytest
 
 from agentltl_cc import hook
-from agentltl_cc.scan import credential_kinds
+from agentltl_coding.scan import credential_kinds
 
 # Built at run time so that no credential-shaped literal sits in the repository.
 FAKE = {

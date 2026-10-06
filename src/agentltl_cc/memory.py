@@ -26,7 +26,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 
-from . import store
+from agentltl_coding import store
 
 PROJECT, USER = "project", "user"
 _SKIP_DIRS = {".git", "node_modules", "vendor", "third_party", ".venv", "venv", "dist", "build",

@@ -1,8 +1,10 @@
 import pytest
 
-from agentltl_cc.guard import Guard
-from agentltl_cc.match import Paths
-from agentltl_cc.rules import loads
+import agentltl_cc  # noqa: F401  (configures the Claude Code harness)
+
+from agentltl_coding.guard import Guard
+from agentltl_coding.pattern import Paths
+from agentltl_coding.rules import loads
 
 
 @pytest.fixture(autouse=True)

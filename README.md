@@ -186,7 +186,17 @@ rules:
       first: {tool: make, with: {argv: deploy-staging}}
       then: {tool: make, with: {argv: deploy-prod}}
     scope: project              # remembered across sessions
+
+  - id: green-before-push       # the tests must have passed, not just run
+    before: {first: {tool: pytest, succeeded: true}, then: git_push}
+
+  - id: tests-before-finishing  # checked when Claude is about to hand back
+    finally: {call: pytest, since: [Edit, Write]}
+    fix: Run pytest.
 ```
+
+A `finally` rule never refuses a call: when Claude is about to finish its turn, it is sent
+back to do what is missing (twice per turn at most, `settings.finish_retries`).
 
 Rules for every project go in `~/.claude/AGENTLTL.yaml`.
 
@@ -301,11 +311,18 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 
 ## How it works
 
-Four Claude Code hooks: `SessionStart` lists the rules to Claude (again after compaction),
-`PreToolUse` checks each call against the rules and the call history, `UserPromptSubmit` lifts
-a `stop` when you reply, and `PostToolUse` records
-calls that ran. Shell commands are parsed by [cli-to-tools](https://github.com/AgentLTL/cli-to-tools);
-rules are evaluated by [AgentLTL](https://github.com/AgentLTL/AgentLTL) (linear temporal logic).
+Six Claude Code hooks:
+- `SessionStart` lists the rules to Claude (again after compaction);
+- `PreToolUse` checks each call against the rules and the call history;
+- `PostToolUse` and `PostToolUseFailure` record the calls that ran, and whether they failed;
+- `Stop` sends Claude back while a `finally` rule is unmet;
+- `UserPromptSubmit` lifts a `stop` when you reply.
+
+The rule language, the library and the guard are
+[agentltl-coding](https://github.com/AgentLTL/agentltl-coding), shared by any coding-agent
+harness. Shell commands are parsed by [cli-to-tools](https://github.com/AgentLTL/cli-to-tools);
+each rule is a formula of [AgentLTL](https://github.com/AgentLTL/AgentLTL) (linear temporal
+logic), judged by its enforcer.
 
 ## Limitations
 
@@ -326,8 +343,8 @@ both.
   AgentLTL works to the rule cookbook, the [rule library](https://agentltl.github.io/rules/library/)
   and every [supported command](https://agentltl.github.io/shell/commands/)
 - [docs/REFERENCE.md](docs/REFERENCE.md): full reference (rule kinds, scopes, CLI, development)
-- [examples/showcase.yaml](examples/showcase.yaml): deploys, git, infrastructure
-- [examples/creative.yaml](examples/creative.yaml): test-first, research hygiene, prompt-injection tripwires
+- [examples/showcase.yaml](https://github.com/AgentLTL/agentltl-coding/blob/main/examples/showcase.yaml): deploys, git, infrastructure
+- [examples/creative.yaml](https://github.com/AgentLTL/agentltl-coding/blob/main/examples/creative.yaml): test-first, research hygiene, prompt-injection tripwires
 
 ## Research
 

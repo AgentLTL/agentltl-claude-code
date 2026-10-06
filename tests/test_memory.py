@@ -6,9 +6,9 @@ import os
 import pytest
 
 from agentltl_cc import cli, memory
-from agentltl_cc.guard import translator_for
-from agentltl_cc.match import Paths
-from agentltl_cc.rules import RuleFileError, load, loads
+from agentltl_coding.guard import translator_for
+from agentltl_coding.pattern import Paths
+from agentltl_coding.rules import RuleFileError, load, loads
 
 CLAUDE_MD = """\
 # Project notes

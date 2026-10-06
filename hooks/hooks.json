@@ -12,6 +12,12 @@
     ],
     "PostToolUse": [
       {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PostToolUse", "timeout": 120}]}
+    ],
+    "PostToolUseFailure": [
+      {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PostToolUseFailure", "timeout": 120}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run Stop", "timeout": 60}]}
     ]
   }
 }

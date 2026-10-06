@@ -34,8 +34,8 @@ How it installs and updates:
 
 - **Python:** it needs Python 3.10+ and git on the machine. The first session start builds a
   virtualenv in the plugin's data directory, which takes about 10 seconds. It copies in
-  AgentLTL and cli-to-tools from the plugin's pinned submodules, or, if those are missing,
-  installs them from GitHub at the commits in `vendor.lock`.
+  AgentLTL, cli-to-tools and agentltl-coding from the plugin's pinned submodules, or, if
+  those are missing, installs them from GitHub at the commits in `vendor.lock`.
 - **Updates:** the plugin has no fixed version, so every push to `main` is an update. With
   auto-update on, Claude Code fetches it in the background a few minutes into a session and
   tells you to run `/reload-plugins`; otherwise it applies at the next launch. Without
@@ -46,7 +46,7 @@ How it installs and updates:
 
 ```bash
 git clone --recurse-submodules https://github.com/AgentLTL/agentltl-claude-code
-agentltl-claude-code/scripts/setup.sh --dev      # .venv with vendor/AgentLTL and vendor/cli-to-tools
+agentltl-claude-code/scripts/setup.sh --dev      # .venv with the three vendor/ packages
 claude --plugin-dir ./agentltl-claude-code       # this session only
 ```
 
@@ -57,7 +57,10 @@ instead of installing the plugin. Don't do both, or every call is recorded twice
 "hooks": {
   "SessionStart": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run SessionStart", "timeout": 600}]}],
   "PreToolUse":   [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PreToolUse"}]}],
-  "PostToolUse":  [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUse"}]}]
+  "PostToolUse":  [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUse"}]}],
+  "PostToolUseFailure": [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUseFailure"}]}],
+  "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run UserPromptSubmit"}]}],
+  "Stop":         [{"hooks": [{"type": "command", "command": "<repo>/hooks/run Stop"}]}]
 }
 ```
 
@@ -132,8 +135,16 @@ Ask Claude ("add a rule that we never push to main"), or run
 |---|---|
 | `SessionStart` | Lists the rules to Claude, including after compaction (`settings.announce: false` turns this off). Reports errors in the rule file. |
 | `PreToolUse` | Translates the call and checks it against what has already run. Breaking a rule gives deny, ask, or deny-and-stop, depending on the rule's mode. Otherwise the hook says nothing, and Claude Code's normal permissions (your settings, auto mode) decide. |
-| `PostToolUse` | Records the call that ran. Calls that were denied, or that you refused, never count. |
-| `UserPromptSubmit` | Lifts a `stop`: after a `stop` rule fires, every tool call is refused until you reply, so Claude can explain what it was doing but not act. |
+| `PostToolUse` | Records the call that ran, as succeeded. Calls that were denied, or that you refused, never count. |
+| `PostToolUseFailure` | Records a call that ran and failed (a command's non-zero exit), as failed: rules can tell with `succeeded`. |
+| `UserPromptSubmit` | Lifts a `stop`: after a `stop` rule fires, every tool call is refused until you reply, so Claude can explain what it was doing but not act. A new turn also lets `finally` rules send Claude back again. |
+| `Stop` | Claude is about to finish its turn: while a `finally` rule is unmet, Claude is sent back with what is missing, at most `finish_retries` times per turn. |
+
+The rules, the guard and the library come from
+[agentltl-coding](https://github.com/AgentLTL/agentltl-coding), which any coding-agent harness
+can use; this plugin adds the Claude Code hooks, the status line, the memory import and the
+built-in `memory-first` rule. Each rule kind compiles to an
+[AgentLTL](https://github.com/AgentLTL/AgentLTL) formula, judged by AgentLTL's enforcer.
 
 How calls are translated:
 
@@ -223,7 +234,7 @@ written. It is also offered by `/agentltl:setup`.
 ### Secret leak alerts
 
 The `PostToolUse` hook scans each call's output for well-known credential formats (see
-`src/agentltl_cc/scan.py`). On a match, you get a notice naming the kind of credential, never
+`agentltl_coding/scan.py`). On a match, you get a notice naming the kind of credential, never
 its value, and Claude is told not to repeat or store it. `settings: {scan_output: false}`
 turns this off.
 
@@ -248,6 +259,7 @@ The full reference, with worked examples, is in
 | `before` | A call needs an earlier call. Optional `since`: the earlier call must come after the last call matching `since`. |
 | `require` | A call's arguments must match. |
 | `at_most` | A cap on matching calls. |
+| `finally` | Before Claude finishes its turn, a call has run (optional `since`: after the last call matching it). Checked at the end of the turn, never refuses a call. |
 | `ltl` / `formula` | Raw AgentLTL. Use `now("x")` for "this call is x" and `called("x")` for "x happened at some point". A call is refused only for what it newly breaks. Rejected: formulas that fail until some call happens (a bare `called("x")`), and formulas that can't fail before the session ends (`F(...)`). |
 
 Targets:
@@ -256,6 +268,7 @@ Targets:
 - narrow it with `with` (equal values) or `where` (globs on values; the key `"*"` means any
   argument);
 - add `exists: true/false` to match only paths that already exist, or only new ones;
+- add `succeeded: true/false` to match only calls that ran and succeeded (or failed);
 - write a `with` value as `$f` to tie two calls to the same value in a `before` rule:
   "read a file before overwriting it" is `first: {tool: Read, with: {file_path: $f}}`,
   `then: {tool: [Edit, Write], with: {file_path: $f}, exists: true}`;
@@ -275,8 +288,9 @@ The details are in "When a command needs a spec" in
 
 ### The rule library
 
-[`library/`](../library) holds ready-made rules, one file each, with a `summary`, `tags`, and
-its `rules`. A rule file switches them on by name:
+The [library](https://github.com/AgentLTL/agentltl-coding/tree/main/src/agentltl_coding/library)
+holds ready-made rules, one file each, with a `summary`, `tags`, and its `rules`. A rule file
+switches them on by name:
 
 ```yaml
 use:
@@ -298,8 +312,8 @@ rules:
   lists without touching the rest of the file. Add `--user` for `~/.claude/AGENTLTL.yaml`.
 - **Choosing interactively:** `/agentltl:setup` lets you tick entries.
 
-To add an entry to the library, add a file to `library/` and a behaviour case to
-`tests/test_library.py`. Every entry must compile without lint warnings.
+To add an entry to the library, add a file to agentltl-coding's `library/` and a behaviour
+case to its `tests/test_library.py`. Every entry must compile without lint warnings.
 
 ## CLI
 
@@ -382,6 +396,9 @@ This cuts both ways:
 
 ### To do
 
+- **Group parallel calls.** Claude Code gives a hook no way to tell which calls one message
+  made together, so a `warn` rule may let two identical parallel calls through: the second
+  counts as insisting.
 - **Judge `exists` against the disk as it was.** `exists` is checked on disk when the call is
   made, which is right for the call being checked. Rules that look back at earlier calls
   (`before`, `at_most`) re-judge those calls against the disk as it is now. A file created and
@@ -399,7 +416,9 @@ scripts/setup.sh --dev
 .venv/bin/ruff check src tests
 ```
 
-When you move a submodule pin, update `vendor.lock` to the same commit; `tests/test_packaging.py`
+The rule tests (and `tests/golden/verdicts.json`, what every packaged rule decides) live in
+agentltl-coding; these are the Claude Code ones. When you move a submodule pin, update
+`vendor.lock` to the same commit; `tests/test_packaging.py`
 fails until they match. An installed plugin keeps one virtualenv per `vendor.lock`
 (`venv-<checksum>` in its data directory, see `scripts/env.sh`). The first hook after an
 update that moved a pin builds the new one. A session still on the old version keeps its

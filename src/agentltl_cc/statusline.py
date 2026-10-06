@@ -20,7 +20,7 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
-from .rules import LIBRARY_DIR, STRENGTH, RuleFileError, load, rule_files
+from agentltl_coding.rules import LIBRARY_DIR, STRENGTH, RuleFileError, load, rule_files
 
 _GREEN, _YELLOW, _DIM, _RESET = "\033[32m", "\033[33m", "\033[2m", "\033[0m"
 _CACHE_SIZE = 32
@@ -66,7 +66,7 @@ def line(payload: Dict[str, Any], color: bool = True, cache: Optional[str] = Non
     cached = _read(cache)
     if key in cached:
         return cached[key]
-    from .match import Paths
+    from agentltl_coding.pattern import Paths
     try:
         ruleset = load(files, Paths(cwd, project))
     except RuleFileError:

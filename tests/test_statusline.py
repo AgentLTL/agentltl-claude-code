@@ -7,9 +7,9 @@ import subprocess
 import pytest
 
 from agentltl_cc import statusline
-from agentltl_cc.rules import LIBRARY_DIR
+from agentltl_cc.cli import PLUGIN_ROOT
 
-ROOT = os.path.dirname(LIBRARY_DIR)
+ROOT = PLUGIN_ROOT
 
 
 @pytest.fixture

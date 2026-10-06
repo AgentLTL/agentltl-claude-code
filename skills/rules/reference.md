@@ -4,6 +4,9 @@
 settings:                 # all optional
   mode: block             # default mode for rules without one
   retries: 3              # blocked attempts allowed by mode: retry before the user is asked
+  retry_counting: cumulative  # or consecutive (an allowed call resets), hybrid (either)
+  report: 3               # how many broken rules of the same mode one refusal lists
+  finish_retries: 2       # times per turn `finally` rules send Claude back before it finishes
   unparseable:            # shell commands the guard cannot analyse (eval, `cmd &`, $CMD args...)
     interactive: ask      # ask | note | allow | deny, in normal permission modes
     auto: note            # in auto / bypass mode: note = let through, tell Claude it was unchecked
@@ -44,6 +47,7 @@ A target says which calls a rule is about.
 | `{tool: [Edit, Write], where: {file_path: "*.lock"}}` | glob on argument values |
 | `{tool: [rm, cat], where: {"*": "**/.env"}}` | glob on ANY argument |
 | `{tool: [Edit, Write, rm], where: {"*": "migrations/*"}, exists: true}` | only paths that already exist (so creating a new file is not caught) |
+| `{tool: pytest, succeeded: true}` | only calls that ran and succeeded (exit status 0); `false`: only failed ones |
 | `[{tool: Write, where: {...}}, {tool: rm, with: {...}}]` | any of several targets |
 
 How matching works:
@@ -61,6 +65,9 @@ How matching works:
   `F=x; rm $F` and `$HOME` are resolved, so they are judged normally.
 - **`exists`** is checked on disk when the call is made. Earlier calls in the trace are judged
   against the disk as it is now.
+- **`succeeded`** reads how a call that ran ended: a Bash command that exits non-zero has
+  failed. A call that has not run yet may or may not succeed, so put `succeeded` on the side
+  of a rule that looks back (`before`'s `first`, `finally`), not on the call being made.
 
 Use `agentltl translate "<command>"` to see names and arguments; `agentltl validate` warns
 about a tool or argument name that nothing produces (such a rule never fires, or, for
@@ -91,16 +98,15 @@ same value, implicitly for every value. "Read a file before you overwrite it":
       - {tool: rm, with: {paths: $f}}
 ```
 
-It reads as `now(Edit, file_path=f) -> called(Read, file_path=f)`, for every `f`. It compiles
-to AgentLTL's `ForAll` + `Var` + `CalledWith`, over the values in the call being checked.
+It reads as "for every `f` the call being made has, an earlier `Read` had `file_path` `f`".
+It compiles to AgentLTL's `ForAll`, over the values in the call being checked.
 
 - Path arguments are made absolute first, so `rm a.py` and `Read /proj/a.py` match.
 - Bind every variable on every target of both sides. Several variables must match together:
   `{chart: $chart, version: $v}` needs an earlier call with that same chart and version. With
   list arguments, every combination of values needs an earlier call.
-- On the `first` side, give only `with` values (AgentLTL compares them for equality), and use a
-  single-valued argument. `cat`'s `paths` is a list and never equals one file;
-  `agentltl validate` warns about it.
+- On the `first` side, give only `with` values. A list argument matches when it contains the
+  value: after `cat a b`, `a` has been read.
 - `since` cannot be combined with a variable yet.
 
 ## Rule kinds
@@ -112,13 +118,17 @@ to AgentLTL's `ForAll` + `Var` + `CalledWith`, over the values in the call being
 | `before: {first: A, then: B, since: S}` | The A must come after the last call matching S. This is "run tests after your last edit". |
 | `require: T` | When one of T's tools is called, its arguments must match T's `with`/`where`. |
 | `at_most: {call: T, times: n}` | At most n calls matching T (in the rule's memory). |
-| `ltl: '<formula>'` | Raw AgentLTL. `now("x")`, `called("x")`, `before("a","b")`, `G`, `X`, `U`, `!`, `&`, `\|`, `->` |
+| `finally: T` | Before Claude finishes its turn, a call matching T has run. Never refuses a call: at the end of the turn Claude is sent back to do it (at most `finish_retries` times per turn). |
+| `finally: {call: T, since: S}` | ... a call matching T has run after the last call matching S. "Run the tests before handing back work you edited." |
+| `ltl: '<formula>'` | Raw AgentLTL. `now("x")`, `called("x")`, `before("a","b")`, `G`, `X`, `U`, `!`, `&`, `\|`, `->`, and looking back: `Y` (previous call), `O` (once), `H` (always so far), `S` (since) |
 | `formula: {type: ..., args: ...}` | Structured AgentLTL, e.g. `{type: Before, args: {a: x, b: y}}` |
 
 How rules are evaluated:
 
-- The kinds other than `ltl` and `formula` judge **only the call being made**. A rule broken
-  earlier, for example by an override, never blocks unrelated later calls.
+- Every kind compiles to an AgentLTL formula. `never`, `before`, `require` and `at_most` look
+  back from the call being made (`G(matches(B) → Y O matches(A))`), so AgentLTL judges them
+  on **that call alone**: a rule broken earlier, for example by an override, never blocks
+  unrelated later calls.
 - `ltl` and `formula` use AgentLTL's own semantics over the whole trace of the rule's memory.
   `now("x")` means "the call at this step is x"; `called("x")` means "x appears anywhere in
   the trace". Under `G` and `X` you almost always want `now`:
@@ -206,6 +216,17 @@ rules:
     why: Uncommitted work is lost for good.
     mode: warn
 
+  # "Don't push unless the tests passed"
+  - id: green-before-push
+    before: {first: {tool: pytest, succeeded: true}, then: git_push, since: [Edit, Write]}
+    why: A red build blocks everyone.
+
+  # "Before you hand back work you edited, run the tests"
+  - id: tests-before-finishing
+    finally: {call: pytest, since: [Edit, Write]}
+    why: Work handed back untested is work I have to test.
+    fix: Run pytest now.
+
   # "At most one migration per task; if stuck, ask me"
   - id: one-migration
     at_most: {call: alembic_revision, times: 1}
@@ -262,7 +283,8 @@ How the spec format works:
   `make target`, `npm run x`, or `python -c "..."`. It sees only the command. Name those
   commands in the rule too, for example `{tool: make, with: {argv: test}}` in the `first:` list.
 - **Only calls that ran count as done.** A call is recorded once it has run, so a denied call,
-  or one you refused, never counts toward `before`.
+  or one you refused, never counts toward `before`. A command that ran and failed is recorded
+  as failed: it counts unless the rule says `succeeded: true`.
 - **Session memory starts empty in each new session.** Use `scope: project` when the rule
   should remember earlier sessions.
 - **`exists` re-judges earlier calls against the disk as it is now** (to do). Mention it when

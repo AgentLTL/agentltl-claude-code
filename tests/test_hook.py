@@ -7,7 +7,8 @@ import sys
 
 import pytest
 
-from agentltl_cc import hook, store
+from agentltl_cc import hook
+from agentltl_coding import store
 
 RULES = """
 rules:
@@ -60,7 +61,7 @@ def test_scenario(project):
     event(project, "PostToolUse", "Edit", {"file_path": str(project / "a.py")})
     assert pre(project, *bash("git push"))["permissionDecision"] == "deny"
 
-    trace = [c["tool_name"] for c in store.read("s1")["trace"]]
+    trace = [c["tool_name"] for c in store.read("s1")["completed_tool_calls"]]
     assert trace == ["pytest", "Edit"]
 
 
@@ -112,7 +113,7 @@ def test_no_rule_file_is_silent(tmp_path):
 
 
 def test_internal_error_asks_instead_of_failing_open(project, monkeypatch):
-    from agentltl_cc import guard
+    from agentltl_coding import guard
 
     def boom(*a, **k):
         raise RuntimeError("kaput")
@@ -144,3 +145,37 @@ def test_project_memory_spans_sessions(project):
     assert hook.run(later) is None                                     # session s2
     store.reset_project(str(project))
     assert hook.run(later)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+FINISH = """
+settings: {finish_retries: 1}
+rules:
+  - id: tests-after-edits
+    finally: {call: pytest, since: [Edit, Write]}
+    fix: Run pytest.
+  - id: green-before-push
+    before: {first: {tool: pytest, succeeded: true}, then: git_push}
+"""
+
+
+def test_a_finally_rule_sends_claude_back_once_per_turn(project):
+    (project / "AGENTLTL.yaml").write_text(FINISH)
+    assert event(project, "Stop") is None
+    event(project, "PostToolUse", "Edit", {"file_path": str(project / "a.py")}, tool_response="ok")
+    out = event(project, "Stop")
+    assert out["decision"] == "block" and "tests-after-edits" in out["reason"]
+    assert event(project, "Stop", stop_hook_active=True) is None      # once per turn
+    event(project, "UserPromptSubmit", prompt="go on")
+    assert event(project, "Stop")["decision"] == "block"
+    event(project, "PostToolUse", *bash("pytest -q"), tool_response="ok")
+    assert event(project, "Stop") is None
+
+
+def test_a_failed_command_is_recorded_as_failed(project):
+    (project / "AGENTLTL.yaml").write_text(FINISH)
+    event(project, "PostToolUseFailure", *bash("pytest -q"), error="Exit code 1")
+    calls = store.read("s1")["completed_tool_calls"]
+    assert calls[-1]["tool_name"] == "pytest" and calls[-1]["status"] == 1
+    assert pre(project, *bash("git push"))["permissionDecision"] == "deny"
+    event(project, "PostToolUse", *bash("pytest -q"), tool_response="3 passed")
+    assert pre(project, *bash("git push")) is None

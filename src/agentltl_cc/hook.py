@@ -5,9 +5,13 @@ event JSON on stdin and prints the hook's JSON answer.
     SessionStart   remind Claude of the rules (also after a compaction); report file errors
     PreToolUse     deny / ask / stop when a call breaks a rule, else stay silent
     UserPromptSubmit  lift a stop: after a `stop` rule fires, every tool call is refused until
-                   the user replies, so Claude can explain but not act
-    PostToolUse    add the call that ran to the session and project traces; warn when its
-                   output contains a credential (settings.scan_output)
+                   the user replies, so Claude can explain but not act; and let `finally`
+                   rules send Claude back again in this new turn
+    PostToolUse    add the call that ran to the session and project traces (status 0); warn
+                   when its output contains a credential (settings.scan_output)
+    PostToolUseFailure  the same for a call that failed (a command's non-zero exit: status 1)
+    Stop           Claude is about to finish: while a `finally` rule is unmet, send it back
+                   with what is missing (at most settings.finish_retries times per turn)
 
 Without an AGENTLTL.yaml (project or ``~/.claude``) it exits at once. It never approves a
 call: silence leaves the decision to Claude Code's permission flow. Any internal error
@@ -21,6 +25,8 @@ import logging
 import os
 import sys
 from typing import Any, Dict, List, Optional
+
+from . import CLAUDE_CODE  # noqa: F401  (configures the harness)
 
 
 def main() -> int:
@@ -38,7 +44,7 @@ def run(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The hook's answer to one event, or None for no output."""
     event = payload.get("hook_event_name", "")
     try:
-        from .rules import rule_files
+        from agentltl_coding.rules import rule_files
         cwd = payload.get("cwd") or os.getcwd()
         project = os.environ.get("CLAUDE_PROJECT_DIR") or cwd
         files = rule_files(cwd, project)
@@ -53,15 +59,18 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
             project: str) -> Optional[Dict[str, Any]]:
     logging.getLogger("agentltl").setLevel(logging.ERROR)
     logging.getLogger("cli_to_tools").setLevel(logging.ERROR)
-    from . import store
-    from .guard import Guard, Verdict, is_auto
-    from .match import Paths
-    from .rules import RuleFileError, load
+    from agentltl_coding import store
+    from agentltl_coding.guard import Guard, Verdict, is_auto
+    from agentltl_coding.pattern import Paths
+    from agentltl_coding.rules import RuleFileError, load
 
     sid = payload.get("session_id") or "default"
     if event == "UserPromptSubmit":          # the user replied: lift a stop, even if the rule
         with store.locked(sid) as state:     # file has since become unreadable
             state.pop("stopped", None)
+            state["termination_nudges"] = 0  # finally rules may send Claude back again
+        with store.locked_project(project) as project_state:
+            project_state["termination_nudges"] = 0
         return None
     try:
         ruleset = load(files, Paths(cwd, project))
@@ -70,17 +79,21 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
 
     if event == "SessionStart":
         return _session_start(ruleset)
-    if event not in ("PreToolUse", "PostToolUse"):
+    if event not in ("PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop"):
         return None
 
     tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input") or {}
     guard = Guard(ruleset, Paths(cwd, project))
     with store.locked(sid) as state, store.locked_project(project) as project_state:
         guard.restore(state, project_state)
-        if event == "PostToolUse":
+        if event in ("PostToolUse", "PostToolUseFailure"):
+            failed = event == "PostToolUseFailure"
             guard.record(tool, tool_input, payload.get("tool_use_id", ""),
-                         payload.get("tool_response"))
+                         payload.get("error") if failed else payload.get("tool_response"),
+                         status=1 if failed else 0)
             verdict = None
+        elif event == "Stop":
+            verdict = guard.finish()
         elif state.get("stopped"):
             verdict = Verdict("deny", _STILL_STOPPED.format(**state["stopped"]),
                               rule=state["stopped"].get("rule"))
@@ -88,15 +101,21 @@ def _handle(event: str, payload: Dict[str, Any], files: List[str], cwd: str,
             verdict = guard.decide(tool, tool_input, auto=is_auto(payload.get("permission_mode")))
             if verdict.action == "stop":
                 state["stopped"] = {"rule": verdict.rule or "?"}
+        for old in ("trace", "engine"):          # saved before AgentLTL 0.2
+            state.pop(old, None)
         state.update(guard.dump())
         state["project_dir"] = project
         project_state.update(guard.dump_project())
-        if verdict is not None and verdict.action != "none":
+        if verdict is not None and verdict.action not in ("none", "block"):
             state.setdefault("decisions", []).append(
                 {"tool": tool, "input": tool_input, "action": verdict.action, "rule": verdict.rule})
             state["decisions"] = state["decisions"][-200:]
-    if event == "PostToolUse":
-        return _scan(ruleset, tool, payload.get("tool_response"))
+    if event in ("PostToolUse", "PostToolUseFailure"):
+        return _scan(ruleset, tool, payload.get("tool_response") or payload.get("error"))
+    if event == "Stop":
+        if verdict is None or verdict.action != "block":
+            return None
+        return {"decision": "block", "reason": verdict.reason}
     return None if verdict is None else _pre_tool_use(verdict)
 
 
@@ -109,7 +128,7 @@ _STILL_STOPPED = (
 def _scan(ruleset: Any, tool: str, response: Any) -> Optional[Dict[str, Any]]:
     if not ruleset.settings.scan_output or response is None:
         return None
-    from .scan import credential_kinds, report
+    from agentltl_coding.scan import credential_kinds, report
     kinds = credential_kinds(response)
     return report(tool, kinds) if kinds else None
 
