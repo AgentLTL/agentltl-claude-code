@@ -2,6 +2,6 @@
 # (tests/test_packaging.py checks it). Used by scripts/setup.sh when vendor/ is empty,
 # which is the case for a plugin installed from a marketplace (no submodules there).
 # Installed in this order: agentltl-coding needs the two before it.
-agentltl https://github.com/AgentLTL/AgentLTL.git 7a69337e15ccd4e12e92ce7a0ae969736fc7660c
+agentltl https://github.com/AgentLTL/AgentLTL.git 36b7b2ed39b03a7a5bef15a83d3c1c6c007054c1
 cli-to-tools https://github.com/AgentLTL/cli-to-tools.git 821de0db334d9bc09713428d3feda6792031895b
-agentltl-coding https://github.com/AgentLTL/agentltl-coding.git 9562a49f4ea29314975e1b0850cb81a88d4d94b3
+agentltl-coding https://github.com/AgentLTL/agentltl-coding.git 64720182b472ad5ada17ff144ce22a4c53cc5d3b
