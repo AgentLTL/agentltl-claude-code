@@ -1,7 +1,8 @@
 """AgentLTL rules in front of Claude Code tool calls.
 
-The rules, the guard and the library are agentltl_coding's; this package is the Claude Code
-side: the hook, the status line, the memory import, and the harness description below.
+The rules, the guard, the hooks' logic and the library are agentltl_coding's; this package is
+the Claude Code side: the hook I/O, the status line, where memory lives, and the harness
+description below.
 """
 
 from agentltl_coding import Harness, configure
@@ -23,6 +24,16 @@ MEMORY_FIRST = {
            "check (facts, preferences, style). If nothing here can be a rule, repeat this exact "
            "call to save it.",
 }
+MEMORY_NOTE = ("before you save anything to memory (CLAUDE.md, CLAUDE.local.md, .claude/rules/, "
+               "auto memory), ask whether it is a rule about tool calls or commands. If it is, "
+               "add it to AGENTLTL.yaml with the /agentltl:rules skill instead: rules there are "
+               "enforced, memory can be forgotten.")
+
+
+def _memory(root, user_only, home):
+    from .memory import claude_sources
+    return claude_sources(root, user_only, home)
+
 
 CLAUDE_CODE = Harness(
     name="claude-code",
@@ -30,5 +41,10 @@ CLAUDE_CODE = Harness(
     user_dir="~/.claude",
     shell_tools={"Bash": "command"},
     builtins={"memory_first": MEMORY_FIRST},
+    auto_modes=("auto", "bypassPermissions", "dontAsk"),
+    project_env="CLAUDE_PROJECT_DIR",
+    skill="/agentltl:{}",
+    memory=_memory,
+    memory_note=MEMORY_NOTE,
 )
 configure(CLAUDE_CODE)
