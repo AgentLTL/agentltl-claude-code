@@ -123,10 +123,17 @@ How rules are evaluated:
   `now("x")` means "the call at this step is x"; `called("x")` means "x appears anywhere in
   the trace". Under `G` and `X` you almost always want `now`:
   `G(now("deploy") -> X(G(!now("deploy"))))` is "deploy at most once".
-- Formulas that AgentLTL classifies as unsafe to enforce (liveness properties) are rejected,
-  because the guard acts on each call as it is made and cannot wait for the session to end.
-  That covers `F(called("pytest"))`, a bare `called("x")`, and a bare `before("a", "b")`.
-  Guard the formula with `G(now(...) -> ...)`, or use a rule kind (`before: [a, b]`).
+- A formula is refused for a call only for what that call newly breaks. After a `warn`
+  override, `G(now("deploy") -> X(G(!now("deploy"))))` doesn't refuse `ls`, but still
+  refuses the next deploy.
+- Two kinds of formula are rejected, because the guard judges each call as it is made:
+  - one that fails until some call happens, such as a bare `called("x")`: every call
+    before x would be refused. Say when it applies: `G(now("deploy") -> called("pytest"))`.
+  - one that can't fail before the session ends, such as `F(called("pytest"))` or
+    `G(now("a") -> F(now("b")))`: it would never refuse anything. Bound it with
+    `within_steps("a", "b", 3)`.
+
+  `before("a", "b")` is accepted: it fails, for good, at the first b with no a before it.
 
 ## Memory
 
@@ -206,7 +213,7 @@ rules:
 
   # Raw LTL: rebase only after fetching
   - id: fetch-before-rebase
-    ltl: 'G(called("git_rebase") -> before("git_fetch", "git_rebase"))'
+    ltl: 'before("git_fetch", "git_rebase")'
     why: Rebasing onto a stale upstream causes conflicts later.
 
 tools:   # teach the translator a project command, so rules can name its arguments

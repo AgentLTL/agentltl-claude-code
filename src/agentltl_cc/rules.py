@@ -123,8 +123,7 @@ class Rule:
 
     def constraint(self) -> Any:
         from agentltl import Constraint
-        return Constraint(self.id, self.formula, description=self.why, repair=self.fix,
-                          enforcement="at_call")
+        return Constraint(self.id, self.formula, description=self.why, repair=self.fix)
 
 
 @dataclass
@@ -756,13 +755,20 @@ def _tools_in(formula: Any) -> set:
 
 
 def _require_runtime_safe(formula: Any, rule_id: str) -> None:
-    """Reject what AgentLTL's classifier calls unsafe to enforce: liveness properties, which
-    a check made call by call cannot judge."""
+    """Reject formulas a check made call by call can't judge, as AgentLTL classifies them:
+    one that fails until some call happens (UNSAFE) would refuse every call before it, and
+    one that can't fail before the session ends (INERT) would never refuse anything."""
     from agentltl.runtime_safety import RuntimeSafety, classify_runtime_safety
-    if classify_runtime_safety(formula).safety == RuntimeSafety.UNSAFE:
+    safety = classify_runtime_safety(formula).safety
+    if safety == RuntimeSafety.UNSAFE:
         raise RuleError(
-            f"rule '{rule_id}': this is a liveness property (AgentLTL classifies it as unsafe "
-            "to enforce): it can only be judged when the session ends, and the guard checks "
-            "each call as it is made. Use a rule kind such as `before: [pytest, git_push]`, or "
-            "guard the formula with G(called(...) -> ...), e.g. "
-            "`G(called(\"git_push\") -> before(\"pytest\", \"git_push\"))`.")
+            f"rule '{rule_id}': this formula fails until some call happens (called(\"x\") is "
+            "false until x runs), so every call before that would be refused. Say when it "
+            "applies, e.g. `G(now(\"deploy\") -> called(\"pytest\"))`, or use a rule kind such "
+            "as `before: {first: pytest, then: git_push}`.")
+    if safety == RuntimeSafety.INERT:
+        raise RuleError(
+            f"rule '{rule_id}': this is a liveness property: it can't fail before the session "
+            "ends (F, in_order: what it asks for may still happen), so it would never refuse a "
+            "call. Bound it, e.g. `within_steps(\"deploy\", \"notify\", 3)`, or say what must "
+            "not happen first, e.g. `before(\"pytest\", \"git_push\")`.")

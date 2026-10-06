@@ -248,7 +248,7 @@ The full reference, with worked examples, is in
 | `before` | A call needs an earlier call. Optional `since`: the earlier call must come after the last call matching `since`. |
 | `require` | A call's arguments must match. |
 | `at_most` | A cap on matching calls. |
-| `ltl` / `formula` | Raw AgentLTL. Use `now("x")` for "this call is x" and `called("x")` for "x happened at some point". Formulas AgentLTL classifies as unsafe to enforce (liveness) are rejected. |
+| `ltl` / `formula` | Raw AgentLTL. Use `now("x")` for "this call is x" and `called("x")` for "x happened at some point". A call is refused only for what it newly breaks. Rejected: formulas that fail until some call happens (a bare `called("x")`), and formulas that can't fail before the session ends (`F(...)`). |
 
 Targets:
 
