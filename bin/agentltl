@@ -6,8 +6,13 @@ root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # shellcheck source=../scripts/env.sh
 source "$root/scripts/env.sh"
 py="$(env_python)"
-if [[ -z "$py" && "$1" == "statusline" ]]; then
-    echo "AgentLTL ○ setting up"      # the status line must not wait for a build
+if [[ -z "$py" && "$1" == "statusline" && $# -eq 1 ]]; then
+    # The status line must not wait for a build: start one in the background, unless one is
+    # running, and show that it is on its way. (`statusline --install` builds it in front.)
+    if [[ ! -d "$(dirname "$(env_venv)")/.setup.lock" ]]; then
+        (env_build </dev/null >/dev/null 2>&1 &)
+    fi
+    echo "AgentLTL ○ setting up"
     exit 0
 fi
 [[ -n "$py" ]] || { env_build && py="$(env_python)"; }
