@@ -3,6 +3,6 @@
   "private": true,
   "description": "The Claude Code version the plugin is tested with (Dockerfile, e2e.sh). Dependabot proposes each new release as a pull request.",
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.291"
+    "@anthropic-ai/claude-code": "2.1.295"
   }
 }
