@@ -1,0 +1,85 @@
+[
+ {
+  "calls": [
+   {
+    "name": "Bash",
+    "args": {
+     "command": "ls",
+     "description": "list"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Write",
+    "args": {
+     "file_path": "/home/node/work/notes.txt",
+     "content": "hello\n"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Write",
+    "args": {
+     "file_path": "/home/node/work/README.md",
+     "content": "overwritten\n"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Bash",
+    "args": {
+     "command": "sudo ls",
+     "description": "root"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Bash",
+    "args": {
+     "command": "rm -rf build",
+     "description": "clean"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Bash",
+    "args": {
+     "command": "git add notes.txt && git commit -q -m 'add notes' -m 'Co-Authored-By: Claude <noreply@anthropic.com>'",
+     "description": "commit"
+    }
+   }
+  ]
+ },
+ {
+  "calls": [
+   {
+    "name": "Bash",
+    "args": {
+     "command": "git push --force origin main",
+     "description": "push"
+    }
+   }
+  ]
+ },
+ {
+  "text": "Done."
+ },
+ {
+  "text": "Done again."
+ }
+]

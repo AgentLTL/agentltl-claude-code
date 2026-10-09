@@ -1,0 +1,16 @@
+# The rules of the end-to-end test (../e2e.sh).
+use: [no-claude-coauthor, read-before-overwrite, no-force-push]
+
+rules:
+  - id: no-sudo
+    never: sudo
+    why: Nothing in this project needs root.
+  - id: ask-before-rm-rf
+    never: {tool: rm, with: {recursive: true}}
+    mode: ask
+    why: Deleting directories loses work.
+  - id: commit-before-finishing
+    finally:
+      call: {tool: git_commit, succeeded: true}
+      since: [Write, Edit]
+    why: Work Claude changed should be committed before it hands back.

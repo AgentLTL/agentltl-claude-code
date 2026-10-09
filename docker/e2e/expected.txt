@@ -1,0 +1,6 @@
+# What `agentltl trace` must show after the scripted session (script.json), in order.
+DENY  [read-before-overwrite] Write /home/node/work/README.md
+DENY  [no-sudo] Bash sudo ls
+ASK   [ask-before-rm-rf] Bash rm -rf build
+DENY  [no-claude-coauthor]
+DENY  [no-force-push]

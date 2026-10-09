@@ -337,6 +337,22 @@ and background jobs (`cmd &`). By default, you're asked about them in normal mod
 mode they go through, and Claude is told they weren't checked. `settings.unparseable` changes
 both.
 
+## Development
+
+```bash
+git clone --recurse-submodules https://github.com/AgentLTL/agentltl-claude-code.git
+cd agentltl-claude-code
+scripts/setup.sh --dev
+.venv/bin/pytest -q
+docker/e2e.sh        # a whole Claude Code session in Docker, against a scripted model
+```
+
+`docker/e2e.sh` needs no account: Claude Code talks to a scripted model
+(`ANTHROPIC_BASE_URL`) that makes the calls in `docker/e2e/script.json`, and the run checks
+that the rules refused what `docker/e2e/expected.txt` says. The Claude Code version it tests
+is pinned in `docker/package.json`; Dependabot proposes each new release as a pull request,
+and the end-to-end workflow flags the ones that break the plugin.
+
 ## Documentation
 
 - **[agentltl.github.io](https://agentltl.github.io)**: the full documentation, from how

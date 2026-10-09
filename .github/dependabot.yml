@@ -1,0 +1,11 @@
+# A pull request for each new Claude Code release (docker/package.json); the e2e workflow
+# tests the plugin on it and says so on the pull request when it breaks.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /docker
+    schedule:
+      interval: daily
+    labels: [agent-update]
+    commit-message:
+      prefix: "Claude Code"

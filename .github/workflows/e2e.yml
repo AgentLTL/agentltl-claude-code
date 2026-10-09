@@ -1,0 +1,20 @@
+# The plugin end to end in Claude Code (docker/e2e.sh), on every pull request (Dependabot's
+# Claude Code updates included) and on main. A failing agent update is flagged on its pull
+# request.
+name: End to end
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    uses: AgentLTL/agentltl-coding/.github/workflows/agent-e2e.yml@main
+    with:
+      notify: lailanelkoussy
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
