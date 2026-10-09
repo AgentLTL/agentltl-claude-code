@@ -6,6 +6,8 @@ updates:
     directory: /docker
     schedule:
       interval: daily
+    cooldown:
+      default-days: 0       # test a release the day it ships
     labels: [agent-update]
     commit-message:
       prefix: "Claude Code"
