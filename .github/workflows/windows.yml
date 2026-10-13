@@ -1,0 +1,62 @@
+# The plugin on native Windows (Git Bash), the way a marketplace install runs it: scripts/setup.sh
+# builds the virtualenv from the pins in vendor.lock, then the CLI and the hook run from it.
+# Windows has `python` but usually no `python3`, and its virtualenvs use Scripts\, not bin/.
+name: Windows
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: The plugin's data folder, with backslashes as Claude Code gives it
+        run: echo "CLAUDE_PLUGIN_DATA=${RUNNER_TEMP}\\plugin-data" >> "$GITHUB_ENV"
+      - name: Build the environment (what /agentltl:setup runs)
+        run: scripts/setup.sh
+      - name: The agentltl command lists the rules
+        run: |
+          mkdir -p "$RUNNER_TEMP/proj" && cp docker/e2e/AGENTLTL.yaml "$RUNNER_TEMP/proj/"
+          cat >> "$RUNNER_TEMP/proj/AGENTLTL.yaml" <<'EOF'
+            - id: no-env
+              never: [Read, Edit, cat]
+              where: {"*": "**/.env"}
+              mode: block
+              why: Secrets stay out of the conversation.
+          EOF
+          cd "$RUNNER_TEMP/proj" && git init -q
+          "$GITHUB_WORKSPACE/bin/agentltl" validate
+      - name: The hook blocks what a rule forbids and allows the rest
+        run: |
+          cd "$RUNNER_TEMP/proj"
+          hook() {  # hook <tool> <json tool_input>: prints the permission decision
+            python -c 'import json, os, sys; print(json.dumps({"session_id": "w1", "cwd": os.getcwd(),
+              "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": sys.argv[1],
+              "tool_input": json.loads(sys.argv[2]), "tool_use_id": "t"}))' "$1" "$2" \
+              | "$GITHUB_WORKSPACE/hooks/run" PreToolUse \
+              | python -c 'import json, sys; t = sys.stdin.read(); print(json.loads(t)["hookSpecificOutput"]["permissionDecision"] if t.strip() else "allow")'
+          }
+          fail=0
+          check() {  # check <expected> <tool> <json>
+            got="$(hook "$2" "$3")"
+            echo "$2 $3 -> $got (want $1)"
+            [ "$got" = "$1" ] || fail=1
+          }
+          check deny  Bash '{"command": "sudo ls"}'
+          check deny  Bash '{"command": "git push --force"}'
+          check deny  Read '{"file_path": "C:\\Users\\runner\\proj\\.env"}'
+          check deny  Read '{"file_path": ".env"}'
+          check deny  Bash '{"command": "cat .env"}'
+          check allow Read '{"file_path": "README.md"}'
+          check allow Bash '{"command": "ls"}'
+          exit $fail
