@@ -15,14 +15,13 @@ jobs:
     defaults:
       run:
         shell: bash
-    env:
-      # Claude Code gives the plugin's data folder with backslashes.
-      CLAUDE_PLUGIN_DATA: ${{ runner.temp }}\plugin-data
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: The plugin's data folder, with backslashes as Claude Code gives it
+        run: echo "CLAUDE_PLUGIN_DATA=${RUNNER_TEMP}\\plugin-data" >> "$GITHUB_ENV"
       - name: Build the environment (what /agentltl:setup runs)
         run: scripts/setup.sh
       - name: The agentltl command lists the rules
