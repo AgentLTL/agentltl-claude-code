@@ -43,8 +43,26 @@ def test_venv_python_is_empty_for_an_unbuilt_venv(tmp_path):
 
 def test_env_python_uses_the_windows_layout(tmp_path):
     py = _stub(tmp_path / "venv" / "Scripts" / "python.exe")
+    (tmp_path / "venv" / "vendor.lock").write_text("")   # setup.sh finished
     out = _env_sh("env_python", {"AGENTLTL_CC_VENV": str(tmp_path / "venv")})
     assert out.stdout.strip() == str(py)
+
+
+def test_a_half_built_venv_is_not_used(tmp_path):
+    """A failed setup leaves an interpreter but no dependencies and no vendor.lock."""
+    _stub(tmp_path / "venv" / "Scripts" / "python.exe")
+    out = _env_sh("env_python", {"AGENTLTL_CC_VENV": str(tmp_path / "venv")})
+    assert out.returncode != 0 and out.stdout == ""
+
+
+def test_build_finishes_a_half_built_venv(tmp_path):
+    log = tmp_path / "calls"
+    venv = tmp_path / "venv"
+    _stub(venv / "Scripts" / "python.exe", f'echo "$@" >> "{log}"')
+    out = _env_sh("env_build", {"AGENTLTL_CC_VENV": str(venv)})
+    assert out.returncode == 0, out.stderr
+    assert "-m pip install -q --upgrade pip" in log.read_text()
+    assert (venv / "vendor.lock").is_file()
 
 
 def test_find_python_skips_a_python3_that_does_not_run(tmp_path):

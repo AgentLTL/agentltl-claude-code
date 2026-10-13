@@ -51,6 +51,12 @@ env_venv_python() {
     return 1
 }
 
+env_built() {
+    # Virtualenv $1 has its interpreter and setup.sh ran to the end (its last step copies
+    # vendor.lock in). A run that failed half way leaves an interpreter but no dependencies.
+    [[ -f "$1/vendor.lock" ]] && env_venv_python "$1" >/dev/null
+}
+
 env_find_python() {
     # A Python 3.10+ to build the virtualenv with: $PYTHON, python3, python, then the Windows
     # `py` launcher. Windows has no python3 or only the Microsoft Store stub, which fails to run.
@@ -73,7 +79,7 @@ env_python() {
         echo "$AGENTLTL_CC_PYTHON"; return 0
     fi
     for c in "$root/.venv" "$(env_venv)"; do
-        env_venv_python "$c" && return 0
+        env_built "$c" && env_venv_python "$c" && return 0
     done
     return 1
 }
@@ -89,7 +95,7 @@ env_build() {
         sleep 1; waited=$((waited + 1))
         if (( waited > 90 )); then rm -rf "$lock"; fi   # a crashed build left it behind
     done
-    if ! env_venv_python "$venv" >/dev/null; then
+    if ! env_built "$venv"; then
         AGENTLTL_CC_VENV="$venv" "$root/scripts/setup.sh" >&2
     fi
     rmdir "$lock" 2>/dev/null
