@@ -41,11 +41,45 @@ env_venv() {
     echo "$data/venv-$sum"
 }
 
+env_venv_python() {
+    # The interpreter inside virtualenv $1: bin/python on Linux and macOS, Scripts/python.exe
+    # on Windows (Git Bash). Nothing, and a failure, when the virtualenv is not built.
+    local p
+    for p in "$1/bin/python" "$1/Scripts/python.exe" "$1/Scripts/python"; do
+        if [[ -x "$p" ]]; then echo "$p"; return 0; fi
+    done
+    return 1
+}
+
+env_built() {
+    # Virtualenv $1 has its interpreter and setup.sh ran to the end (its last step copies
+    # vendor.lock in). A run that failed half way leaves an interpreter but no dependencies.
+    [[ -f "$1/vendor.lock" ]] && env_venv_python "$1" >/dev/null
+}
+
+env_find_python() {
+    # A Python 3.10+ to build the virtualenv with: $PYTHON, python3, python, then the Windows
+    # `py` launcher. Windows has no python3 or only the Microsoft Store stub, which fails to run.
+    local c exe ok='import sys; sys.exit(sys.version_info < (3, 10))'
+    for c in "${PYTHON:-}" python3 python; do
+        [[ -n "$c" ]] && command -v "$c" >/dev/null 2>&1 || continue
+        if "$c" -c "$ok" >/dev/null 2>&1; then echo "$c"; return 0; fi
+    done
+    if command -v py >/dev/null 2>&1; then
+        exe="$(py -3 -c 'import sys; print(sys.executable)' 2>/dev/null | tr -d '\r')"
+        if [[ -n "$exe" ]] && "$exe" -c "$ok" >/dev/null 2>&1; then echo "$exe"; return 0; fi
+    fi
+    return 1
+}
+
 env_python() {
     # The Python to run the guard with, or nothing when it is not built yet.
     local c
-    for c in "${AGENTLTL_CC_PYTHON:-}" "$root/.venv/bin/python" "$(env_venv)/bin/python"; do
-        if [[ -n "$c" && -x "$c" ]]; then echo "$c"; return 0; fi
+    if [[ -n "${AGENTLTL_CC_PYTHON:-}" && -x "$AGENTLTL_CC_PYTHON" ]]; then
+        echo "$AGENTLTL_CC_PYTHON"; return 0
+    fi
+    for c in "$root/.venv" "$(env_venv)"; do
+        env_built "$c" && env_venv_python "$c" && return 0
     done
     return 1
 }
@@ -61,7 +95,7 @@ env_build() {
         sleep 1; waited=$((waited + 1))
         if (( waited > 90 )); then rm -rf "$lock"; fi   # a crashed build left it behind
     done
-    if [[ ! -x "$venv/bin/python" ]]; then
+    if ! env_built "$venv"; then
         AGENTLTL_CC_VENV="$venv" "$root/scripts/setup.sh" >&2
     fi
     rmdir "$lock" 2>/dev/null
