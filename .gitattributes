@@ -1,0 +1,6 @@
+# Shell scripts must keep LF line endings: with core.autocrlf on Windows, a CRLF checkout makes
+# bash fail on `#!/usr/bin/env bash\r` and on every `\r` inside the scripts.
+*.sh text eol=lf
+bin/* text eol=lf
+hooks/run text eol=lf
+scripts/* text eol=lf
