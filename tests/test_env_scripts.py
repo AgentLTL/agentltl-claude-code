@@ -53,7 +53,7 @@ def test_venv_python_is_empty_for_an_unbuilt_venv(plugin, tmp_path):
 
 def test_env_python_uses_the_windows_layout(plugin, tmp_path):
     py = _stub(tmp_path / "venv" / "Scripts" / "python.exe")
-    (tmp_path / "venv" / "vendor.lock").write_text("")   # setup.sh finished
+    shutil.copy(plugin / "vendor.lock", tmp_path / "venv" / "vendor.lock")   # setup.sh finished
     out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(tmp_path / "venv")})
     assert out.stdout.strip() == str(py)
 
@@ -93,7 +93,7 @@ def test_setup_drives_pip_through_the_windows_interpreter(plugin, tmp_path):
     out = subprocess.run([BASH, str(plugin / "scripts" / "setup.sh")], capture_output=True,
                          text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
     assert out.returncode == 0, out.stderr
-    calls = log.read_text().splitlines()
+    calls = [c for c in log.read_text().splitlines() if c != "-m pip --version"]
     assert calls[0] == "-m pip install -q --upgrade pip"
     assert all(c.startswith("-m pip install -q ") for c in calls)
     assert (venv / "vendor.lock").is_file()
@@ -110,3 +110,35 @@ def test_setup_says_so_when_there_is_no_python(plugin, tmp_path):
     assert out.returncode == 1
     assert "needs Python 3.10" in out.stderr
     assert not (tmp_path / "venv").exists()
+
+
+def test_a_marker_from_other_pins_is_not_built(plugin, tmp_path):
+    """A pin change must rebuild, also in a fixed directory such as <plugin>/.venv."""
+    venv = tmp_path / "venv"
+    _stub(venv / "Scripts" / "python.exe")
+    (venv / "vendor.lock").write_text("an older set of pins\n")
+    out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(venv)})
+    assert out.returncode != 0 and out.stdout == ""
+
+
+def test_setup_bootstraps_pip_in_a_venv_that_has_none(plugin, tmp_path):
+    """`python -m venv` creates the interpreter first; an interruption leaves it without pip."""
+    log = tmp_path / "calls"
+    venv = tmp_path / "venv"
+    _stub(venv / "Scripts" / "python.exe",
+          f'echo "$@" >> "{log}"\n[[ "$*" == "-m pip --version" ]] && exit 1\nexit 0')
+    out = subprocess.run([BASH, str(plugin / "scripts" / "setup.sh")], capture_output=True,
+                         text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
+    assert out.returncode == 0, out.stderr
+    calls = log.read_text().splitlines()
+    assert calls.index("-m ensurepip --upgrade") < calls.index("-m pip install -q --upgrade pip")
+
+
+def test_a_failed_setup_does_not_leave_the_marker_of_an_earlier_one(plugin, tmp_path):
+    venv = tmp_path / "venv"
+    _stub(venv / "Scripts" / "python.exe", 'case "$*" in *"pip install"*) exit 1;; esac')
+    shutil.copy(plugin / "vendor.lock", venv / "vendor.lock")
+    out = subprocess.run([BASH, str(plugin / "scripts" / "setup.sh")], capture_output=True,
+                         text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
+    assert out.returncode != 0
+    assert not (venv / "vendor.lock").exists()

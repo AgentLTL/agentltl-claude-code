@@ -52,9 +52,10 @@ env_venv_python() {
 }
 
 env_built() {
-    # Virtualenv $1 has its interpreter and setup.sh ran to the end (its last step copies
-    # vendor.lock in). A run that failed half way leaves an interpreter but no dependencies.
-    [[ -f "$1/vendor.lock" ]] && env_venv_python "$1" >/dev/null
+    # Virtualenv $1 has its interpreter and setup.sh ran to the end for the current pins (its
+    # last step copies vendor.lock in). A run that failed half way leaves an interpreter but no
+    # marker, and a pin change leaves a marker that no longer matches.
+    cmp -s "$1/vendor.lock" "$root/vendor.lock" && env_venv_python "$1" >/dev/null
 }
 
 env_find_python() {
