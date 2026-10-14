@@ -7,7 +7,14 @@ on:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
         with:
@@ -18,4 +25,6 @@ jobs:
       - name: Install
         run: scripts/setup.sh --dev
       - name: Test
-        run: .venv/bin/pytest -q
+        run: |
+          py=.venv/bin/python; [ -x "$py" ] || py=.venv/Scripts/python.exe   # Windows layout
+          "$py" -m pytest -q
