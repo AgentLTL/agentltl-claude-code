@@ -97,7 +97,8 @@ class TestSplit:
 class TestSources:
     def test_what_applies_in_a_project(self, home):
         root, h = home
-        found = {(os.path.relpath(s.path, h if "home" in s.path else root), s.kind, s.target)
+        found = {(os.path.relpath(s.path, h if "home" in s.path else root).replace(os.sep, "/"),
+                  s.kind, s.target)
                  for s in memory.sources(str(root), home=str(h))}
         slug = memory.project_slug(str(root))
         assert found == {
@@ -112,6 +113,7 @@ class TestSources:
         assert [s.kind for s in memory.sources(str(root), user_only=True, home=str(h))] == [
             "claude-md"]
 
+    @pytest.mark.skipif(os.name == "nt", reason="a Windows path gets its drive letter in the slug")
     def test_slug_matches_claude_code(self):
         assert memory.project_slug("/home/me/github/AgentLTL-BFCL") == \
             "-home-me-github-AgentLTL-BFCL"
