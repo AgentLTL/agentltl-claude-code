@@ -32,7 +32,13 @@ if ! env_venv_python "$venv" >/dev/null; then
 fi
 # `python -m pip`, not bin/pip or Scripts/pip.exe: the layout differs between Linux/macOS and
 # Windows, and on Windows pip.exe cannot upgrade itself.
-pip=("$(env_venv_python "$venv")" -m pip)
+vpy="$(env_venv_python "$venv")"
+# An interrupted `python -m venv` leaves the interpreter before pip is bootstrapped.
+"$vpy" -m pip --version >/dev/null 2>&1 || "$vpy" -m ensurepip --upgrade >/dev/null
+# Not built, for any pins, until the last step: a failure part way must not leave the marker
+# of an earlier run, which would make the half-changed environment look complete.
+rm -f "$venv/vendor.lock"
+pip=("$vpy" -m pip)
 "${pip[@]}" install -q --upgrade pip
 
 # Editable installs only for development: a plugin install lives in a versioned directory
