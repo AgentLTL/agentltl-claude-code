@@ -58,7 +58,9 @@ done < "$root/vendor.lock"
 "${pip[@]}" install -q "pyyaml>=6.0"
 
 if [[ "${1:-}" == "--dev" ]]; then
-    "${pip[@]}" install -q -e "$root[dev]"
+    # From the plugin directory with a relative path: Git Bash converts a bare /d/a/x path for
+    # a Windows pip, but not one with an [extra] on the end.
+    (cd "$root" && "${pip[@]}" install -q -e ".[dev]")
 fi
 cp "$root/vendor.lock" "$venv/vendor.lock"
 echo "AgentLTL installed in $venv"
