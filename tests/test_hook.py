@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -129,7 +130,7 @@ def test_launcher(project, tmp_path):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = {**os.environ, "AGENTLTL_CC_PYTHON": sys.executable,
            "CLAUDE_PROJECT_DIR": str(project)}
-    done = subprocess.run([os.path.join(root, "hooks", "run"), "PreToolUse"],
+    done = subprocess.run([shutil.which("bash"), os.path.join(root, "hooks", "run"), "PreToolUse"],
                           input=json.dumps(payload), capture_output=True, text=True, env=env)
     assert done.returncode == 0
     assert json.loads(done.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"

@@ -3,6 +3,7 @@ bin/python on Linux and macOS, Scripts/python.exe on Windows (Git Bash), and mus
 `python3` existing. These tests stub the interpreters, so nothing is installed."""
 
 import os
+import pathlib
 import shutil
 import subprocess
 
@@ -12,6 +13,9 @@ SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASH = shutil.which("bash")
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash")
+# These strip PATH down to a stub directory; on Windows bash then loses its DLLs and
+# `python` is a real python.exe, not a link. windows.yml covers the same ground for real.
+WINDOWS_PATH_REASON = "needs a PATH of only stubs, which Git Bash on Windows cannot run with"
 
 
 @pytest.fixture
@@ -42,7 +46,7 @@ def test_venv_python_finds_either_layout(plugin, tmp_path, rel):
     py = _stub(tmp_path / "venv" / rel)
     out = _env_sh(plugin, f'env_venv_python "{tmp_path / "venv"}"')
     assert out.returncode == 0
-    assert out.stdout.strip() == str(py)
+    assert pathlib.Path(out.stdout.strip()) == py
 
 
 def test_venv_python_is_empty_for_an_unbuilt_venv(plugin, tmp_path):
@@ -55,7 +59,7 @@ def test_env_python_uses_the_windows_layout(plugin, tmp_path):
     py = _stub(tmp_path / "venv" / "Scripts" / "python.exe")
     shutil.copy(plugin / "vendor.lock", tmp_path / "venv" / "vendor.lock")   # setup.sh finished
     out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(tmp_path / "venv")})
-    assert out.stdout.strip() == str(py)
+    assert pathlib.Path(out.stdout.strip()) == py
 
 
 def test_a_half_built_venv_is_not_used(plugin, tmp_path):
@@ -75,6 +79,7 @@ def test_build_finishes_a_half_built_venv(plugin, tmp_path):
     assert (venv / "vendor.lock").is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason=WINDOWS_PATH_REASON)
 def test_find_python_skips_a_python3_that_does_not_run(plugin, tmp_path):
     """The Microsoft Store's python3 stub exits non-zero: fall through to `python`."""
     bin_dir = tmp_path / "bin"
@@ -99,6 +104,7 @@ def test_setup_drives_pip_through_the_windows_interpreter(plugin, tmp_path):
     assert (venv / "vendor.lock").is_file()
 
 
+@pytest.mark.skipif(os.name == "nt", reason=WINDOWS_PATH_REASON)
 def test_setup_says_so_when_there_is_no_python(plugin, tmp_path):
     tools = tmp_path / "tools"
     tools.mkdir()

@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 
 import pytest
@@ -89,7 +90,7 @@ def test_the_shim_runs_the_cli(project, tmp_path):
     (project / "AGENTLTL.yaml").write_text("rules: [{id: a, never: rm}]\n")
     env = {**os.environ, "HOME": str(tmp_path / "home"),
            "AGENTLTL_CC_PYTHON": os.sys.executable}
-    out = subprocess.run([str(tmp_path / "d" / "statusline")], text=True, capture_output=True,
-                         env=env, timeout=60,
+    out = subprocess.run([shutil.which("bash"), str(tmp_path / "d" / "statusline")],
+                         text=True, encoding="utf-8", capture_output=True, env=env, timeout=60,
                          input=json.dumps({"workspace": {"current_dir": str(project)}}))
     assert "AgentLTL" in out.stdout and "2 rules · 1 block · 1 warn" in out.stdout, out.stderr
