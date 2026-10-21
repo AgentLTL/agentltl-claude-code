@@ -207,7 +207,7 @@ def test_launcher_ignores_the_callers_python_path(tmp_path):
                    capture_output=True, text=True, env=env, cwd=str(tmp_path))
     # Python gets none of them, and runs isolated (-I) from the plugin's own launcher.
     assert mark.read_text().strip() == (
-        f"[][][] -I -s {root}/scripts/launch.py agentltl_cc.hook")
+        f"[][][] -I -s -X utf8 {root}/scripts/launch.py agentltl_cc.hook")
 
 
 def _launcher_with_python(tmp_path, project, body):

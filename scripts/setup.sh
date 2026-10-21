@@ -52,6 +52,7 @@ editable=""
 
 while read -r name url commit; do
     [[ -z "$name" || "$name" == \#* ]] && continue
+    commit="${commit%$'\r'}"   # vendor.lock has CRLF line endings in a Windows checkout
     case "$name" in agentltl) dir=AgentLTL ;; *) dir="$name" ;; esac
     if [[ -f "$root/vendor/$dir/pyproject.toml" ]]; then
         "${pip[@]}" install -q $editable "$root/vendor/$dir" "${pipflags[@]}"

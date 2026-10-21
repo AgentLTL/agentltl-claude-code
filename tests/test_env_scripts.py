@@ -241,3 +241,16 @@ class TestBrokenEnvironment:
         out = _env_sh(plugin, "env_doctor", {"AGENTLTL_CC_VENV": str(venv)})
         assert out.returncode == 0 and "verdict:       working" in out.stdout
 
+def test_setup_reads_a_vendor_lock_with_windows_line_endings(plugin, tmp_path):
+    """A Windows checkout can turn vendor.lock into CRLF: the commit must not keep the \\r."""
+    lock = plugin / "vendor.lock"
+    lock.write_bytes(lock.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    log = tmp_path / "calls"
+    venv = tmp_path / "venv"
+    _stub(venv / "Scripts" / "python.exe", f'echo "$@" >> "{log}"')
+    out = subprocess.run([BASH, str(plugin / "scripts" / "setup.sh")], capture_output=True,
+                         text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
+    assert out.returncode == 0, out.stderr
+    assert b"\r" not in log.read_bytes()
+    assert b"git+https://github.com/AgentLTL/AgentLTL.git@" in log.read_bytes()
+
