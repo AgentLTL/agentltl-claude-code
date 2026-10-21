@@ -5,6 +5,11 @@
 root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 export PYTHONUTF8=1   # Windows pipes use the ANSI code page: the hook payload, rule files
                       # and the status line are UTF-8
+# The environment is the plugin's own: a PYTHONPATH or PYTHONHOME the user's shell exports (a
+# project's virtualenv, say) would put that project's packages ahead of ours. Tests and
+# development point AGENTLTL_CC_PYTHON at their own Python and keep theirs.
+if [[ -z "${AGENTLTL_CC_PYTHON:-}" ]]; then unset PYTHONPATH; fi
+unset PYTHONHOME
 # shellcheck source=../scripts/env.sh
 source "$root/scripts/env.sh"
 py="$(env_python)"
