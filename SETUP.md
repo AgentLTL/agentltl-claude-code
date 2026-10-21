@@ -121,7 +121,10 @@ Tell the user:
   install again.
 - **`Failed to clone` / `access rights`:** use the HTTPS URL from step 3, not `owner/repo`.
 - **Setup fails with `ensurepip` or `No module named venv`:** install `python3-venv` (step 1).
-- **Every call asks for permission with "AgentLTL ... is not installed":** the environment could
-  not be built. Run step 5 and read its error.
+- **Every call asks for permission with "AgentLTL ... is not installed, or its environment is
+  broken", or "could not run its guard":** the environment could not be built, or its Python
+  stopped working (upgraded or removed, `Could not import runpy module`). The hook already tried
+  to rebuild it once. Run `"$plugin/bin/agentltl" doctor`: it names the Python in use, what it
+  fails to import, and the variables that can break it; then run step 5 and read its error.
 - **A rule never fires:** run `"$plugin/bin/agentltl" validate` and fix any `WARNING`. It means
   a tool or argument name that no command produces.

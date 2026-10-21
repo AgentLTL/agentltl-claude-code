@@ -23,13 +23,16 @@ else
     venv="$root/.venv"
 fi
 
-if ! env_venv_python "$venv" >/dev/null; then
+# A virtualenv whose interpreter is gone or does not start (its base Python was upgraded or
+# removed) is made again, not repaired: venv would keep a dangling link without --clear.
+if ! env_venv_python "$venv" >/dev/null || ! "$(env_venv_python "$venv")" -c "import sys" >/dev/null 2>&1; then
     python="$(env_find_python)" || {
         echo "AgentLTL needs Python 3.10 or newer, and found none (tried \$PYTHON, python3, python, py -3)." >&2
         exit 1
     }
-    "$python" -m venv "$venv"
+    "$python" -m venv --clear "$venv"
 fi
+export GIT_TERMINAL_PROMPT=0   # a git install must fail, not wait for a password nobody sees
 # `python -m pip`, not bin/pip or Scripts/pip.exe: the layout differs between Linux/macOS and
 # Windows, and on Windows pip.exe cannot upgrade itself.
 vpy="$(env_venv_python "$venv")"
@@ -39,7 +42,8 @@ vpy="$(env_venv_python "$venv")"
 # of an earlier run, which would make the half-changed environment look complete.
 rm -f "$venv/vendor.lock"
 pip=("$vpy" -m pip)
-"${pip[@]}" install -q --upgrade pip
+pipflags=(--disable-pip-version-check --no-input --timeout 30)
+"${pip[@]}" install -q --upgrade pip "${pipflags[@]}"
 
 # Editable installs only for development: a plugin install lives in a versioned directory
 # that Claude Code deletes some days after an update, so it must get real copies.
@@ -50,17 +54,25 @@ while read -r name url commit; do
     [[ -z "$name" || "$name" == \#* ]] && continue
     case "$name" in agentltl) dir=AgentLTL ;; *) dir="$name" ;; esac
     if [[ -f "$root/vendor/$dir/pyproject.toml" ]]; then
-        "${pip[@]}" install -q $editable "$root/vendor/$dir"
+        "${pip[@]}" install -q $editable "$root/vendor/$dir" "${pipflags[@]}"
     else
-        "${pip[@]}" install -q "$name @ git+$url@$commit"
+        "${pip[@]}" install -q "$name @ git+$url@$commit" "${pipflags[@]}"
     fi
 done < "$root/vendor.lock"
-"${pip[@]}" install -q "pyyaml>=6.0"
+"${pip[@]}" install -q "pyyaml>=6.0" "${pipflags[@]}"
 
 if [[ "${1:-}" == "--dev" ]]; then
     # From the plugin directory with a relative path: Git Bash converts a bare /d/a/x path for
     # a Windows pip, but not one with an [extra] on the end.
     (cd "$root" && "${pip[@]}" install -q -e ".[dev]")
 fi
+# Complete only if the guard's libraries import in isolated mode, as the hooks run it.
+env_smoke "$vpy" || {
+    echo "AgentLTL: the new environment cannot import the guard's libraries:" >&2
+    "$vpy" -I -c "import yaml, agentltl_coding" >&2 || true
+    exit 1
+}
+# The base interpreter the venv's python links to, so a later upgrade or removal is noticed.
+"$vpy" -I -c "import os, sys; print(os.path.realpath(sys._base_executable))" > "$venv/.base" 2>/dev/null || true
 cp "$root/vendor.lock" "$venv/vendor.lock"
 echo "AgentLTL installed in $venv"

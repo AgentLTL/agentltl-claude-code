@@ -98,9 +98,9 @@ def test_setup_drives_pip_through_the_windows_interpreter(plugin, tmp_path):
     out = subprocess.run([BASH, str(plugin / "scripts" / "setup.sh")], capture_output=True,
                          text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
     assert out.returncode == 0, out.stderr
-    calls = [c for c in log.read_text().splitlines() if c != "-m pip --version"]
-    assert calls[0] == "-m pip install -q --upgrade pip"
-    assert all(c.startswith("-m pip install -q ") for c in calls)
+    calls = [c for c in log.read_text().splitlines() if c.startswith("-m pip install")]
+    assert calls[0].startswith("-m pip install -q --upgrade pip")
+    assert all(c.startswith("-m pip install -q ") and "--no-input" in c for c in calls)
     assert (venv / "vendor.lock").is_file()
 
 
@@ -137,7 +137,8 @@ def test_setup_bootstraps_pip_in_a_venv_that_has_none(plugin, tmp_path):
                          text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
     assert out.returncode == 0, out.stderr
     calls = log.read_text().splitlines()
-    assert calls.index("-m ensurepip --upgrade") < calls.index("-m pip install -q --upgrade pip")
+    upgrade = next(i for i, c in enumerate(calls) if c.startswith("-m pip install -q --upgrade pip"))
+    assert calls.index("-m ensurepip --upgrade") < upgrade
 
 
 def test_a_failed_setup_does_not_leave_the_marker_of_an_earlier_one(plugin, tmp_path):
@@ -148,3 +149,95 @@ def test_a_failed_setup_does_not_leave_the_marker_of_an_earlier_one(plugin, tmp_
                          text=True, env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
     assert out.returncode != 0
     assert not (venv / "vendor.lock").exists()
+
+
+# ── a venv that no longer works is noticed, rebuilt once, and reported ────────
+
+def _built_venv(plugin, tmp_path, body="exit 0"):
+    """A finished venv (marker copied in) whose python is a stub running *body*."""
+    venv = tmp_path / "venv"
+    py = _stub(venv / "bin" / "python", body)
+    shutil.copy(plugin / "vendor.lock", venv / "vendor.lock")
+    return venv, py
+
+
+@pytest.mark.skipif(os.name == "nt", reason=WINDOWS_PATH_REASON)
+class TestBrokenEnvironment:
+    def test_heal_drops_the_marker_of_a_python_that_cannot_start(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path, "echo 'Could not import runpy module' >&2; exit 1")
+        out = _env_sh(plugin, f'env_heal "{py}"', {"AGENTLTL_CC_VENV": str(venv)})
+        assert out.returncode == 0
+        assert not (venv / "vendor.lock").exists()
+
+    def test_heal_leaves_a_python_that_works(self, plugin, tmp_path):
+        """The failure was the guard's own: rebuilding the environment would not help."""
+        venv, py = _built_venv(plugin, tmp_path)
+        out = _env_sh(plugin, f'env_heal "{py}"', {"AGENTLTL_CC_VENV": str(venv)})
+        assert out.returncode == 1 and (venv / "vendor.lock").exists()
+
+    def test_heal_leaves_a_test_override_alone(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path, "exit 1")
+        out = _env_sh(plugin, f'env_heal "{py}"',
+                      {"AGENTLTL_CC_VENV": str(venv), "AGENTLTL_CC_PYTHON": str(py)})
+        assert out.returncode == 1 and (venv / "vendor.lock").exists()
+
+    def test_a_removed_base_interpreter_means_not_built(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path)
+        (venv / ".base").write_text(str(tmp_path / "gone" / "python3") + "\n")
+        out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(venv)})
+        assert out.returncode != 0 and out.stdout == ""
+
+    @pytest.mark.parametrize("imports_work", [True, False])
+    def test_an_upgraded_base_interpreter_is_checked_once(self, plugin, tmp_path, imports_work):
+        venv, py = _built_venv(plugin, tmp_path, "exit 0" if imports_work else "exit 1")
+        base = _stub(tmp_path / "base" / "python3")
+        (venv / ".base").write_text(f"{base}\n")
+        os.utime(venv / ".base", (1, 1))                  # the record is older than the base
+        out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(venv)})
+        assert (out.returncode == 0) == imports_work
+        if imports_work:                                  # checked: the record is current again
+            assert (venv / ".base").stat().st_mtime > 1
+
+    def test_a_venv_without_a_base_record_is_still_used(self, plugin, tmp_path):
+        """Built before the record existed."""
+        venv, py = _built_venv(plugin, tmp_path)
+        out = _env_sh(plugin, "env_python", {"AGENTLTL_CC_VENV": str(venv)})
+        assert pathlib.Path(out.stdout.strip()) == py
+
+    def test_a_failed_build_is_not_repeated_by_every_hook(self, plugin, tmp_path):
+        log = tmp_path / "calls"
+        venv = tmp_path / "venv"
+        _stub(venv / "bin" / "python",
+              f'echo "$@" >> "{log}"\ncase "$*" in *"pip install"*) exit 1;; esac')
+        env = {"AGENTLTL_CC_VENV": str(venv)}
+        assert _env_sh(plugin, "env_build", env).returncode != 0
+        assert (tmp_path / ".build-failed").exists()
+        calls = log.read_text()
+        again = _env_sh(plugin, "env_build", env)
+        assert again.returncode == 1 and "not trying again yet" in again.stderr
+        assert log.read_text() == calls                   # no second pip, no second git
+
+    def test_a_lock_left_by_a_dead_build_is_taken_over_at_once(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path)
+        dead = subprocess.Popen(["true"])
+        dead.wait()
+        lock = tmp_path / ".setup.lock"
+        lock.mkdir()
+        (lock / "pid").write_text(str(dead.pid))
+        out = subprocess.run([BASH, "-c", f'root="{plugin}"; source "{plugin}/scripts/env.sh"; env_build'],
+                             capture_output=True, text=True, timeout=30,
+                             env={**os.environ, "AGENTLTL_CC_VENV": str(venv)})
+        assert out.returncode == 0 and not lock.exists()
+
+    def test_doctor_says_what_is_wrong(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path, "echo 'Could not import runpy module' >&2; exit 1")
+        out = _env_sh(plugin, "env_doctor", {"AGENTLTL_CC_VENV": str(venv), "PYTHONHOME": "/x"})
+        assert out.returncode == 1
+        assert "imports:       FAILED" in out.stdout and "Could not import runpy" in out.stdout
+        assert "PYTHONHOME=/x" in out.stdout and "To rebuild: rm -rf" in out.stdout
+
+    def test_doctor_on_a_working_environment(self, plugin, tmp_path):
+        venv, py = _built_venv(plugin, tmp_path, "echo 3.12.0")
+        out = _env_sh(plugin, "env_doctor", {"AGENTLTL_CC_VENV": str(venv)})
+        assert out.returncode == 0 and "verdict:       working" in out.stdout
+
