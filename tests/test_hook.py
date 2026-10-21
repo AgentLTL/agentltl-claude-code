@@ -129,6 +129,7 @@ def test_launcher(project, tmp_path):
                "tool_input": {"command": "git push"}, "tool_use_id": "t"}
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = {**os.environ, "AGENTLTL_CC_PYTHON": sys.executable,
+           "AGENTLTL_CC_PYTHONPATH": os.pathsep.join(sys.path),
            "CLAUDE_PROJECT_DIR": str(project)}
     done = subprocess.run([shutil.which("bash"), os.path.join(root, "hooks", "run"), "PreToolUse"],
                           input=json.dumps(payload), capture_output=True, text=True, env=env)
@@ -196,12 +197,63 @@ def test_launcher_ignores_the_callers_python_path(tmp_path):
     (root / ".venv" / "bin").mkdir(parents=True)
     shutil.copy(root / "vendor.lock", root / ".venv" / "vendor.lock")
     stub = root / ".venv" / "bin" / "python"
-    stub.write_text('#!/bin/sh\necho "[$PYTHONPATH][$PYTHONHOME]" > "$MARK"\n')
+    stub.write_text('#!/bin/sh\necho "[$PYTHONPATH][$PYTHONHOME][$VIRTUAL_ENV] $*" > "$MARK"\n')
     stub.chmod(0o755)
     mark = tmp_path / "mark"
     env = {k: v for k, v in os.environ.items() if k != "AGENTLTL_CC_PYTHON"}
-    env.update(HOME=str(tmp_path / "home"), MARK=str(mark),
+    env.update(HOME=str(tmp_path / "home"), MARK=str(mark), VIRTUAL_ENV="/elsewhere/venv",
                PYTHONPATH="/elsewhere/site-packages", PYTHONHOME="/elsewhere")
     subprocess.run([shutil.which("bash"), str(root / "hooks" / "run"), "PreToolUse"], input="{}",
                    capture_output=True, text=True, env=env, cwd=str(tmp_path))
-    assert mark.read_text().strip() == f"[{root}/src][]"
+    # Python gets none of them, and runs isolated (-I) from the plugin's own launcher.
+    assert mark.read_text().strip() == (
+        f"[][][] -I -s -X utf8 {root}/scripts/launch.py agentltl_cc.hook")
+
+
+def _launcher_with_python(tmp_path, project, body):
+    """hooks/run with a stub interpreter in the plugin's .venv, so it is not a test override."""
+    src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = tmp_path / "plugin"
+    shutil.copytree(os.path.join(src, "hooks"), root / "hooks")
+    shutil.copytree(os.path.join(src, "scripts"), root / "scripts")
+    shutil.copy(os.path.join(src, "vendor.lock"), root / "vendor.lock")
+    (root / ".venv" / "bin").mkdir(parents=True)
+    shutil.copy(root / "vendor.lock", root / ".venv" / "vendor.lock")
+    stub = root / ".venv" / "bin" / "python"
+    stub.write_text("#!/bin/sh\n" + body + "\n")
+    stub.chmod(0o755)
+    # A recent failed setup: the hook must not try to rebuild (pip, git, network) in a test.
+    (root / ".build-failed").write_text("")
+    (project / "AGENTLTL.yaml").write_text("rules: [{id: a, never: rm}]\n")
+    env = {k: v for k, v in os.environ.items() if k != "AGENTLTL_CC_PYTHON"}
+    env.update(HOME=str(tmp_path / "home"), CLAUDE_PROJECT_DIR=str(project))
+
+    def run(event):
+        return subprocess.run([shutil.which("bash"), str(root / "hooks" / "run"), event],
+                              input="{}", capture_output=True, text=True, env=env, cwd=str(project))
+    return run
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the stub interpreter is a shell script")
+def test_a_python_that_cannot_run_the_guard_is_reported_not_ignored(project, tmp_path):
+    """Python dying at startup ("Could not import runpy module") used to be a non-blocking hook
+    error: the call went ahead and no rule was enforced. The hook now says the call was not
+    checked: an "ask" for a tool call, a message for the other events."""
+    run = _launcher_with_python(tmp_path, project,
+                                'echo "Could not import runpy module" >&2; exit 1')
+    pre = run("PreToolUse")
+    assert pre.returncode == 0
+    decision = json.loads(pre.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "ask"
+    assert "NOT checked" in decision["permissionDecisionReason"]
+    assert "Could not import runpy module" in decision["permissionDecisionReason"]
+    later = json.loads(run("PostToolUse").stdout)["systemMessage"]     # the venv was dropped
+    assert "agentltl doctor" in later and "rules are not enforced" in later
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the stub interpreter is a shell script")
+def test_a_failing_guard_says_nothing_when_there_are_no_rules(project, tmp_path):
+    run = _launcher_with_python(tmp_path, project, "exit 1")
+    (project / "AGENTLTL.yaml").unlink()
+    out = run("PreToolUse")
+    assert out.returncode == 0 and out.stdout == ""
