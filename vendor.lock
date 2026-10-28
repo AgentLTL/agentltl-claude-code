@@ -4,4 +4,4 @@
 # Installed in this order: agentltl-coding needs the two before it.
 agentltl https://github.com/AgentLTL/AgentLTL.git 36b7b2ed39b03a7a5bef15a83d3c1c6c007054c1
 cli-to-tools https://github.com/AgentLTL/cli-to-tools.git 42526911f31d8ae73cd09a61d54dced680933b78
-agentltl-coding https://github.com/AgentLTL/agentltl-coding.git ebe757435592d04ae4b9cb10e97f5ce26a02a3ab
+agentltl-coding https://github.com/AgentLTL/agentltl-coding.git df5142523d61ff2932796c4bd633ee322ef8753f

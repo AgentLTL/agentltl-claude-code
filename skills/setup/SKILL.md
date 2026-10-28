@@ -26,7 +26,7 @@ Arguments: `$ARGUMENTS` (`--user` means rules for every project, in `~/.claude/A
    - Group the entries by theme using their tags, for example "Git safety", "Files and
      secrets", or "Workflow and cost".
    - Each option's label is the entry's `name`, and its description is the `summary`.
-   - Offer a bundle (an entry tagged `bundle`, such as `devops-secrets`) as one option that
+   - Offer a bundle (an entry tagged `bundle`, such as `devops-secrets`, or a theme: `theme-release-safety`, `theme-data-safety`, `theme-budget`, `theme-research`, `theme-human-in-the-loop`) as one option that
      switches on all the entries it lists.
    - Mark entries already on with "(on)" in the description. Tell the user that unticking one
      switches it off.
