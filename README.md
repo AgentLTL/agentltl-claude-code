@@ -53,8 +53,9 @@ A plain command filter can only allow or forbid `helm upgrade`. This rule also k
   `git_push{force: true}`, all or nothing.
 - **Plain-language rules:** ask Claude to "add a rule: never push to main"; it writes the rule
   and tests it before saving.
-- **Opt-in rule library:** 18 tested best-practice rules for git, secrets, installs and
-  infrastructure, plus a `devops-secrets` bundle. Activate the ones you want, skip the rest.
+- **Opt-in rule library:** tested best-practice rules for git, secrets, installs, infrastructure,
+  data and cost, plus bundles (`devops-secrets` and five themes). Activate the ones you want,
+  skip the rest.
 - **Secret leak alerts:** when a command's output contains what looks like a credential, you
   are told which kind, so you can rotate it, and Claude is told not to repeat it.
 - **Rules instead of memory:** when Claude would save a rule to `CLAUDE.md` or its memory,
@@ -126,6 +127,20 @@ ones to activate, per project or for all projects, and leave the rest off.
 | `no-secrets-in-commands` | Never put a secret on the command line: password flags, bearer headers, credentials in URLs |
 | `no-leaky-debug` | Warn before debug output that prints credentials (`curl -v` with auth headers, `kubectl -v=6+`, `--debug`) |
 | `no-skipping-secret-scans` | Ask before `--no-verify` (skips secret-scanning hooks) or `git add -f` |
+
+**Themes.** One line switches on a whole topic; `agentltl library` lists what each contains:
+
+| Theme | Rules |
+|---|---|
+| `theme-release-safety` | tests before push, no force push, nothing pushed to main by name, `terraform plan` before every apply, ask before infrastructure changes, production targets and publishing |
+| `theme-data-safety` | the secrets rules, ask before data files leave the machine (scp, rsync, aws s3, curl, gists), a dump before every `dropdb` |
+| `theme-budget` | read before overwriting; limits on subagents (8), web searches (10) and tool calls (300) |
+| `theme-research` | search the project before the web, limit web searches |
+| `theme-human-in-the-loop` | ask before publishing, sending messages, deleting remote data, discarding work or deleting recursively |
+
+The limits are `warn` rules: Claude is refused once and may insist. For agents with domain
+tools (payments, healthcare, support...) see the templates in
+[agentltl-coding](https://github.com/AgentLTL/agentltl-coding/tree/main/examples/rulebooks).
 
 **Activate** them interactively with `/agentltl:setup`, or by name in `AGENTLTL.yaml`:
 
