@@ -60,6 +60,7 @@ instead of installing the plugin. Don't do both, or every call is recorded twice
   "PostToolUse":  [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUse"}]}],
   "PostToolUseFailure": [{"matcher": "*", "hooks": [{"type": "command", "command": "<repo>/hooks/run PostToolUseFailure"}]}],
   "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run UserPromptSubmit"}]}],
+  "UserPromptExpansion": [{"hooks": [{"type": "command", "command": "<repo>/hooks/run UserPromptExpansion"}]}],
   "Stop":         [{"hooks": [{"type": "command", "command": "<repo>/hooks/run Stop"}]}]
 }
 ```
@@ -137,7 +138,8 @@ Ask Claude ("add a rule that we never push to main"), or run
 | `PreToolUse` | Translates the call and checks it against what has already run. Breaking a rule gives deny, ask, or deny-and-stop, depending on the rule's mode. Otherwise the hook says nothing, and Claude Code's normal permissions (your settings, auto mode) decide. |
 | `PostToolUse` | Records the call that ran, as succeeded. Calls that were denied, or that you refused, never count. |
 | `PostToolUseFailure` | Records a call that ran and failed (a command's non-zero exit), as failed: rules can tell with `succeeded`. |
-| `UserPromptSubmit` | Lifts a `stop`: after a `stop` rule fires, every tool call is refused until you reply, so Claude can explain what it was doing but not act. A new turn also lets `finally` rules send Claude back again. |
+| `UserPromptSubmit` | Lifts a `stop`: after a `stop` rule fires, every tool call is refused until you reply, so Claude can explain what it was doing but not act. A new turn also lets `finally` rules send Claude back again. Records the prompt as a `UserPrompt {prompt}` call when a rule's `UserPrompt` target matches it (the prompt as typed: `/review docs` for a command), so rules can react to what was asked; other prompts are not saved. Claude Code also sends scheduled tasks, background subagents' reports and other sessions' messages through this hook. |
+| `UserPromptExpansion` | You typed a skill's command (`/review`): records it as the `Skill {skill, args}` call Claude would have made, so a rule about a skill (`since: {tool: Skill, with: {skill: review}}`) also holds when you type it. |
 | `Stop` | Claude is about to finish its turn: while a `finally` rule is unmet, Claude is sent back with what is missing, at most `finish_retries` times per turn. |
 
 The rules, the guard and the library come from

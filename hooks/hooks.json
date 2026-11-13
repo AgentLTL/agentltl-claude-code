@@ -10,6 +10,9 @@
     "UserPromptSubmit": [
       {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run UserPromptSubmit", "timeout": 60}]}
     ],
+    "UserPromptExpansion": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run UserPromptExpansion", "timeout": 60}]}
+    ],
     "PostToolUse": [
       {"matcher": "*", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/run PostToolUse", "timeout": 120}]}
     ],
