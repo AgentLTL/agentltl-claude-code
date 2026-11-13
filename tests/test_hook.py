@@ -183,6 +183,60 @@ def test_a_failed_command_is_recorded_as_failed(project):
     assert pre(project, *bash("git push")) is None
 
 
+SKILLS = """
+settings: {announce: false}
+rules:
+  - id: review-loaded
+    finally:
+      call: {tool: Skill, with: {skill: review}}
+      since: {tool: UserPrompt, where: {prompt: "*/review*"}}
+  - id: review-checklist
+    finally:
+      call: {tool: Read, where: {file_path: "*review/checklist.md"}}
+      since: {tool: Skill, with: {skill: review}}
+"""
+
+
+def typed(project, line):
+    """The user types *line*; a /command also expands, as Claude Code reports it."""
+    event(project, "UserPromptSubmit", prompt=line)
+    if line.startswith("/"):
+        name, _, args = line[1:].partition(" ")
+        event(project, "UserPromptExpansion", prompt=line, expansion_type="slash_command",
+              command_name=name, command_args=args, command_source="userSettings")
+
+
+def test_a_typed_skill_command_counts_as_loading_the_skill(project):
+    (project / "AGENTLTL.yaml").write_text(SKILLS)
+    typed(project, "/review docs")
+    skill = store.read("s1")["completed_tool_calls"][-1]
+    assert skill["tool_name"] == "Skill"
+    assert skill["arguments"] == {"skill": "review", "args": "docs"}
+    out = event(project, "Stop")                  # the skill is loaded: its card is due
+    assert out["decision"] == "block" and "review-checklist" in out["reason"]
+    assert "review-loaded" not in out["reason"]
+    event(project, "PostToolUse", "Read", {"file_path": "/s/review/checklist.md"},
+          tool_response="...")
+    assert event(project, "Stop") is None
+
+
+def test_a_skill_asked_for_in_the_prompt_but_never_loaded(project):
+    (project / "AGENTLTL.yaml").write_text(SKILLS)
+    typed(project, "please run /review on the docs")
+    out = event(project, "Stop")
+    assert out["decision"] == "block" and "review-loaded" in out["reason"]
+    prompts = [c for c in store.read("s1")["completed_tool_calls"]
+               if c["tool_name"] == "UserPrompt"]
+    assert prompts[0]["arguments"] == {"prompt": "please run /review on the docs"}
+
+
+def test_only_skill_commands_are_recorded_and_prompts_only_when_a_rule_names_them(project):
+    event(project, "UserPromptSubmit", prompt="my plans")
+    event(project, "UserPromptExpansion", prompt="/srv:p", expansion_type="mcp_prompt",
+          command_name="srv:p", command_args="")
+    assert "completed_tool_calls" not in store.read("s1")
+
+
 def test_launcher_ignores_the_callers_python_path(tmp_path):
     """A PYTHONPATH from the user's shell (another project's virtualenv) must not reach the
     plugin's Python: its packages would shadow the plugin's own."""

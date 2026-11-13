@@ -6,7 +6,10 @@ event JSON on stdin and prints the hook's JSON answer.
     PreToolUse     deny / ask / stop when a call breaks a rule, else stay silent
     UserPromptSubmit  lift a stop: after a `stop` rule fires, every tool call is refused until
                    the user replies, so Claude can explain but not act; and let `finally`
-                   rules send Claude back again in this new turn
+                   rules send Claude back again in this new turn. Record the prompt as a
+                   `UserPrompt {prompt}` call when a rule's `UserPrompt` target matches it
+    UserPromptExpansion  the user typed a skill's /command: record it as the `Skill` call
+                   Claude would have made, so rules about a skill also hold when it is typed
     PostToolUse    add the call that ran to the session and project traces (status 0); warn
                    when its output contains a credential (settings.scan_output)
     PostToolUseFailure  the same for a call that failed (a command's non-zero exit: status 1)
@@ -59,12 +62,20 @@ def _handle(event: str, payload: Dict[str, Any], session: Any) -> Optional[Dict[
     from agentltl_coding.rules import RuleFileError
 
     if event == "UserPromptSubmit":          # the user replied: lift a stop; finally rules
-        session.prompt()                     # may send Claude back again
+        session.prompt(payload.get("prompt"))  # may send Claude back again
         return None
     try:
         session.ruleset
     except RuleFileError as exc:
         return _broken_file(event, exc.problems)
+
+    if event == "UserPromptExpansion":
+        name = payload.get("command_name")
+        if payload.get("expansion_type") == "slash_command" and name:
+            args = payload.get("command_args")
+            session.post("Skill", {"skill": name, **({"args": args} if args else {})}, "",
+                         None, status=0)
+        return None
 
     if event == "SessionStart":
         return _session_start(session)

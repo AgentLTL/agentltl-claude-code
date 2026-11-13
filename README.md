@@ -326,12 +326,14 @@ It is on by default; turn it off with `settings: {scan_output: false}`.
 
 ## How it works
 
-Six Claude Code hooks:
+Seven Claude Code hooks:
 - `SessionStart` lists the rules to Claude (again after compaction);
 - `PreToolUse` checks each call against the rules and the call history;
 - `PostToolUse` and `PostToolUseFailure` record the calls that ran, and whether they failed;
 - `Stop` sends Claude back while a `finally` rule is unmet;
-- `UserPromptSubmit` lifts a `stop` when you reply.
+- `UserPromptSubmit` lifts a `stop` when you reply, and records the prompt when a rule's
+  `UserPrompt` target matches it;
+- `UserPromptExpansion` records a typed skill command (`/review`) as the `Skill` call it stands for.
 
 The rule language, the library and the guard are
 [agentltl-coding](https://github.com/AgentLTL/agentltl-coding), shared by any coding-agent
